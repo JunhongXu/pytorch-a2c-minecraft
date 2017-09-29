@@ -22,3 +22,17 @@ but more complex than the first one with two rooms and obstacles.
 4. Train PPO on the first environment.
 5. Test trained A2C on the second environment.
 6. Test trained PPO on the second environment.
+
+# Things learned:
+1. Use multiprocess Process and Pipe to collect data from different processes.
+    `from multiprocess import Process, Pipe
+    def collector(worker):
+        cmd, data = worker.recv()
+        ...
+        
+    remotes, workers = Pipe()
+    p = Process(target=collector, args=(workers, ))
+    p.start()
+    
+    remotes.send(...)
+    obs = remotes.recv()`
