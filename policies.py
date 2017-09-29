@@ -13,7 +13,7 @@ class CNNPolicy(nn.Module):
 
         self.conv1 = self.__make_conv_elu(3, 32, 8, 4)
         self.conv2 = self.__make_conv_elu(32, 64, 4, 2)
-        self.conv3 = self.__make_conv_elu(64, 128, 3, 1)
+        self.conv3 = self.__make_conv_elu(64, 64, 3, 1)
 
         self.fc1 = nn.Sequential(
             nn.Linear(256*(h//8), 512),
@@ -27,11 +27,24 @@ class CNNPolicy(nn.Module):
 
     def init_weight(self):
         for module in self.modules():
-            print(isinstance(module, nn.Conv2d))
+            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
+                module.bias.data.zero_()
+                nn.init.orthogonal(module.weight.data)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
+        x = self.conv3(x)
+
+        x = self.fc1(x)
+        action = F.softmax(self.action(x))
+        value = self.value(x)
+
+        return action, value
+
+    def act(self, x):
+        action, _ = self.forward(x)
+        # return action.
 
     @staticmethod
     def __make_conv_elu(input_feats, output_feats, size, stride, padding=0):
