@@ -25,7 +25,8 @@ but more complex than the first one with two rooms and obstacles.
 
 # Things learned:
 1. Use multiprocess Process and Pipe to collect data from different processes.
-    `from multiprocess import Process, Pipe
+```
+    from multiprocess import Process, Pipe
     def collector(worker):
         cmd, data = worker.recv()
         ...
@@ -35,4 +36,5 @@ but more complex than the first one with two rooms and obstacles.
     p.start()
     
     remotes.send(...)
-    obs = remotes.recv()`
+    obs = remotes.recv()
+```
