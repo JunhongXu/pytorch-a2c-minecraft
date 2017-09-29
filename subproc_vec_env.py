@@ -42,6 +42,8 @@ def worker(remote, env_fn_wrapper):
             break
         elif cmd == 'get_spaces':
             remote.send((env.action_space, env.observation_space))
+        elif cmd == 'render':
+            env.render()
         else:
             raise NotImplementedError
 
@@ -94,6 +96,10 @@ class SubprocVecEnv(VecEnv):
             remote.send(('close', None))
         for p in self.ps:
             p.join()
+
+    def render(self):
+        for remote in self.remotes:
+            remote.send(('render', None))
 
     @property
     def num_envs(self):
