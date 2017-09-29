@@ -24,7 +24,7 @@ but more complex than the first one with two rooms and obstacles.
 6. Test trained PPO on the second environment.
 
 # Things learned:
-1. Use multiprocess Process and Pipe to collect data from different processes.
+1. 09/28/2017: Use multiprocess Process and Pipe to collect data from different processes.
 ```
     from multiprocess import Process, Pipe
     def collector(worker):
