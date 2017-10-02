@@ -38,3 +38,6 @@ but more complex than the first one with two rooms and obstacles.
     remotes.send(...)
     obs = remotes.recv()
 ```
+
+# Issues
+1. Import pytorch and than calling agent.startMission() gives segmentation fault. A workaround is using mxnet for now.
