@@ -1,14 +1,11 @@
-from policies import MLP
-from gym import ObservationWrapper
-import gym
-from gym.spaces.box import Box
-from subproc_vec_env import SubprocVecEnv
-import numpy as np
-from torch.autograd import Variable
-from bench import Monitor
 import os
-import torch
 
+import gym
+import numpy as np
+import torch
+from torch.autograd import Variable
+
+from envs.bench import Monitor
 
 num_updates = 5000
 num_steps = 50
