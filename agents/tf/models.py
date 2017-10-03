@@ -24,18 +24,17 @@ def dense(x, num_outputs, name, initializer, activation_fn=tf.nn.elu):
 
 
 class CNNAgent(object):
-    def __init__(self, env, sess, nstack, beta=0.1, reuse=False):
+    def __init__(self, env, sess, nstack, obs_dim, reuse=False):
         """
                                                             -> (action, action_space)
             Construct a CNN agent. 3->64->128->256->(fc, 512)
                                                             -> (value, 1)
         """
-        h, w, c = env.observation_space.shape
+        h, w, c = obs_dim
         action_space = env.action_space.n
         self.sess = sess
         self.obs_shape = (None, h, w, c*nstack)
         self.obs = tf.placeholder(tf.float32, self.obs_shape, name='observations')
-        self.beta = beta
 
         with tf.variable_scope('model', reuse=reuse):
             conv1 = conv(self.obs, 32, 8, 4, 'conv1')
@@ -44,15 +43,18 @@ class CNNAgent(object):
             fc1 = dense(conv3, 256, 'fc1', initializer=tf.orthogonal_initializer(1))
             self.policy = dense(fc1, action_space, 'policy', initializer=tf.orthogonal_initializer(1), activation_fn=None)
             self.value = dense(fc1, 1, 'value', initializer=tf.orthogonal_initializer(1), activation_fn=None)
+            self.sampled_action = tf.squeeze(tf.multinomial(tf.log(self.policy), 1), squeeze_dims=1)
 
-        self.sess.run(tf.global_variables_initializer())
+    def trainable_parameters(self):
+        return tf.trainable_variables()
 
     def act(self, obs):
         """
         obs is of shape (nenvs*nsteps, h, w, c*nstacks)
         """
-        action, value = self.sess.run([self.policy, self.value], feed_dict={self.obs: obs})
-        return action, value.reshape(-1)
+        action, sampled_action, value = self.sess.run([self.policy, self.sampled_action, self.value], feed_dict={self.obs: obs})
+
+        return action, sampled_action, value.reshape(-1)
 
     def loss(self, rs, actions, advantage):
         """
@@ -69,7 +71,7 @@ class CNNAgent(object):
 
         # nenvs*nsteps, nactions
         action_probs = tf.nn.softmax(self.policy)
-        entropy = -tf.nn.log_softmax(action_probs) * action_probs
+        entropy = -tf.log(action_probs) * action_probs
         entropy = tf.reduce_mean(tf.reduce_sum(entropy, axis=1), name='entropy')
 
         value_loss = tf.reduce_mean(tf.square(self.value - rs), name='value_loss')
@@ -101,3 +103,5 @@ if __name__ == '__main__':
 
     p, e, v = sess.run([policy_loss, entropy, value_loss], {returns: rs, action_placeholder: actions, advantage: adv, cnn.obs: obs})
     print(p, e, v)
+    variables = cnn.trainable_params()
+    print(variables)

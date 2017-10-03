@@ -3,7 +3,6 @@ import gym_minecraft
 import gym
 import numpy as np
 
-
 from envs.bench import Monitor
 
 num_updates = 5000
@@ -40,10 +39,9 @@ if __name__ == '__main__':
     env.init(start_minecraft=True)
     obs = env.reset()
 
-
     # this import order is necessary to perform in Minecraft env
     from torch.autograd import Variable
-    from deprecated.policies_pytorch import CNNPolicy
+    from agents.pytorch.models import CNNPolicy
     import cv2
     import torch
 
