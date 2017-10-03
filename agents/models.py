@@ -52,26 +52,52 @@ class CNNAgent(object):
         obs is of shape (nenvs*nsteps, h, w, c*nstacks)
         """
         action, value = self.sess.run([self.policy, self.value], feed_dict={self.obs: obs})
-        return action, value
+        return action, value.reshape(-1)
 
-    def policy_gradient(self, obs, rs, advantage):
+    def loss(self, rs, actions, advantage):
         """
         Calculates the components of policy gradient: log\pi, advantage function, and entropy.
         These are used in the training step.
 
-        obs: numpy array, observations from environments
-        rs: placeholder, holds the value of returns
+        rs: placeholder, holds the value of returns, shape(nenvs*nsteps)
+        actions: placeholder, holds the value of actions taken in each trail shape(nenvs*nsteps)
+        advantage: placeholder, holds the value of advantage estimation shape(nenvs*nsteps)
         """
-        log_probs = tf.nn.sparse_softmax_cross_entropy_with_logits(self.policy)
-        advantage = rs - self.value
-        entropy = self.beta *
+        # negative log probability loss -log(softmax(actions))
+        neg_log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.policy, labels=actions, name='nll')
+        policy_loss = tf.reduce_mean(neg_log_prob * advantage, name='policy_loss')
+
+        # nenvs*nsteps, nactions
+        action_probs = tf.nn.softmax(self.policy)
+        entropy = -tf.nn.log_softmax(action_probs) * action_probs
+        entropy = tf.reduce_mean(tf.reduce_sum(entropy, axis=1), name='entropy')
+
+        value_loss = tf.reduce_mean(tf.square(self.value - rs), name='value_loss')
+        return policy_loss, entropy, value_loss
 
 
 if __name__ == '__main__':
     import gym
+    tf.set_random_seed(0)
+    np.random.seed(0)
     env = gym.make('Breakout-v0')
     sess = tf.InteractiveSession()
     cnn = CNNAgent(env, sess, 4)
+    action_placeholder = tf.placeholder(dtype=tf.int32, shape=(None, ))
+    advantage = tf.placeholder(dtype=tf.float32, shape=(None, ))
+    returns = tf.placeholder(dtype=tf.float32, shape=(None, ))
     print(env.observation_space.shape)
-    obs = np.random.randn(100, 210, 160, 3*4)
-    print(cnn.act(obs))
+    obs = np.random.randn(1, 210, 160, 3*4)
+
+
+    actions, values = cnn.act(obs)
+    rs = np.array([1])
+    adv = rs - values
+
+    print('action logits', actions)
+    actions = np.argmax(actions, axis=1)
+    print('taken actions', actions, 'estimated value', values, 'advantage', adv)
+    policy_loss, entropy, value_loss = cnn.loss(returns, action_placeholder, adv)
+
+    p, e, v = sess.run([policy_loss, entropy, value_loss], {returns: rs, action_placeholder: actions, advantage: adv, cnn.obs: obs})
+    print(p, e, v)

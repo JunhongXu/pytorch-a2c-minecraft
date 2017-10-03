@@ -1,9 +1,8 @@
 import os
-
+import gym_minecraft
 import gym
 import numpy as np
-import torch
-from torch.autograd import Variable
+
 
 from envs.bench import Monitor
 
@@ -35,57 +34,35 @@ def calculate_returns(R, next_return, gamma=0.99):
 def wrap_pytorch(x):
     return Variable(torch.from_numpy(x).float().cuda())
 
+
 if __name__ == '__main__':
-    # # init env
-    # envs = SubprocVecEnv([make_env('CartPole-v0', 0, i, 'logs') for i in range(0, 4)])
-    # policy = MLP(envs.observation_space.shape[0], envs.action_space.n)
-    # policy.cuda()
-    # observations = envs.reset()
-    # for update in range(num_updates):
-    #     observations = wrap_pytorch(observations)
-    #     rewards = []
-    #     values = []
-    #     actions = []
-    #     if render:
-    #         envs.render()
-    #     for i in range(0, num_steps):
-    #         if render:
-    #             envs.render()
-    #         # act
-    #         action, value = policy.act(observations)
-    #         action = action.data.cpu().numpy().flatten()
-    #         value = value.data.cpu().numpy().flatten()
-    #         # receive observations and rewards
-    #         observations, reward, dones, info = envs.step(action)
-    #         print(reward, dones)
-    #         observations = wrap_pytorch(observations)
-    #         rewards.append(reward)
-    #         values.append(value)
-    #         actions.append(action)
-    #     print(np.stack(rewards, 1).shape)
-    #     print(np.stack(actions, 1).shape)
-    #     print(np.stack(values, 1).shape)
-    #     break
-        # calculate returns
-        # returns = calculate_returns(rewards, values, actions)
+    env = gym.make('MinecraftBasic-v0')
+    env.init(start_minecraft=True)
+    obs = env.reset()
 
-        # update policy
-        # update_policy(policy, returns, )
-        # for i in range(0, 1000):
-            # envs.
-    # # start training process
-    # for update in range(num_updates):
-    #     # run one episode
-    #
-    #     # evaluate returns
-    #
-    #     # update
-    # print(bench.Monitor)
-    R = np.array([
-        [1, 1, 0, 1],
-        [0, 0, 1, 1]
-    ])
 
-    calculate_returns(R, np.array([
-        [0], [0]
-    ]))
+    # this import order is necessary to perform in Minecraft env
+    from torch.autograd import Variable
+    from deprecated.policies_pytorch import CNNPolicy
+    import cv2
+    import torch
+
+
+    policy = CNNPolicy(num_actions=4, obs_space=(84, 84))
+    policy.cuda()
+    done = False
+    for u in range(num_steps):
+        while not done:
+            obs = cv2.resize(obs, (84, 84))
+            obs = np.transpose(obs, (2, 0, 1))
+            tensor_obs = wrap_pytorch(obs)
+            tensor_obs = tensor_obs.unsqueeze(dim=0)
+            results = policy.forward(tensor_obs)
+            print(results)
+            env.render()
+            action = env.action_space.sample()
+            obs, r, done, _ = env.step(action)
+
+        if done:
+            env.reset()
+            done = False

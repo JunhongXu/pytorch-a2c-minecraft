@@ -39,5 +39,14 @@ but more complex than the first one with two rooms and obstacles.
     obs = remotes.recv()
 ```
 
+2. 10/02/2017: Minimizing cross entropy loss == maximizing log likelihood
+    
+    In OpenAI A2C baseline implementation, instead of using -log(pi(a)) as the loss function, 
+    they use cross entropy: cross_entropy(action_logits, taken_actions) as the policy loss. This
+    makes me wonder these two loss functions are equal. It turns out that these two are equal. 
+
 # Issues
-1. Import pytorch and than calling agent.startMission() gives segmentation fault. A workaround is using mxnet for now.
+1. Import pytorch and than calling agent.startMission() gives segmentation fault. 
+A workaround is using tensorflow for now.
+
+Solved, import pytorch after the first env.reset()
