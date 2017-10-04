@@ -58,7 +58,6 @@ class Monitor(Wrapper):
             self.f.truncate()
             self.logger = JSONLogger(self.f)
 
-
     def reset(self):
         if not self.allow_early_resets and not self.needs_reset:
             raise RuntimeError("Tried to reset an environment before done. If you want to allow early resets, wrap your env with Monitor(env, path, allow_early_resets=True)")

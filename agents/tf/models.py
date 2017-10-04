@@ -24,16 +24,16 @@ def dense(x, num_outputs, name, initializer, activation_fn=tf.nn.elu):
 
 
 class CNNAgent(object):
-    def __init__(self, env, sess, nstack, obs_dim, reuse=False):
+    def __init__(self, env, sess, reuse=False):
         """
                                                             -> (action, action_space)
             Construct a CNN agent. 3->64->128->256->(fc, 512)
                                                             -> (value, 1)
         """
-        h, w, c = obs_dim
+        h, w, c = env.observation_space.shape
         action_space = env.action_space.n
         self.sess = sess
-        self.obs_shape = (None, h, w, c*nstack)
+        self.obs_shape = (None, h, w, c)
         self.obs = tf.placeholder(tf.float32, self.obs_shape, name='observations')
 
         with tf.variable_scope('model', reuse=reuse):

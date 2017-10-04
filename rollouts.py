@@ -28,13 +28,16 @@ class Rollouts(object):
         """
             update the current rollout buffer
         """
-        # update observation
-        self.observations[step] = observations
+        # update observation, update from t1, t0 is reset observations
+        self.observations[step + 1] = observations
         self.log_actions[step] = log_actions
         self.actions[step] = actions
         self.values[step] = values
         self.dones[step] = dones
         self.rewards[step] = rewards
+
+    def clear(self):
+        pass
 
     def calc_returns(self, value):
         self.returns[-1] = value

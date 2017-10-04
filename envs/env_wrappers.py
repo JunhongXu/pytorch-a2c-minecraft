@@ -51,10 +51,29 @@ class ClipRewardEnv(gym.RewardWrapper):
         return np.sign(reward)
 
 
+class FireResetEnv(gym.Wrapper):
+    def __init__(self, env):
+        """Take action on reset for environments that are fixed until firing."""
+        gym.Wrapper.__init__(self, env)
+        assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
+        assert len(env.unwrapped.get_action_meanings()) >= 3
+
+    def _reset(self):
+        self.env.reset()
+        obs, _, done, _ = self.env.step(1)
+        if done:
+            self.env.reset()
+        obs, _, done, _ = self.env.step(2)
+        if done:
+            self.env.reset()
+        return obs
+
+
 def wrap(env):
     env = ClipRewardEnv(env)
     env = WarpFrame(env, 84, 84, 1)
     env = FrameStack(env, 4)
+    env = FireResetEnv(env)
     return env
 
 
@@ -62,7 +81,7 @@ def make_env(env_id, seed, rank, log_dir):
     def _thunk():
         env = gym.make(env_id)
         env.seed(seed + rank)
-        env = Monitor(env, os.path.join(log_dir, '{}.monitor.json'.format(rank)))
+        env = Monitor(env, os.path.join(log_dir, '{}.monitor.json'.format(rank)), True)
         env = wrap(env)
         return env
     return _thunk
