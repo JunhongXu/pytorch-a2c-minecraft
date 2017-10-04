@@ -5,6 +5,7 @@ from collections import deque
 import numpy as np
 import os
 from bench import Monitor
+import gym_minecraft
 
 
 class WarpFrame(gym.ObservationWrapper):
@@ -73,7 +74,7 @@ def wrap(env):
     env = ClipRewardEnv(env)
     env = WarpFrame(env, 84, 84, 1)
     env = FrameStack(env, 4)
-    env = FireResetEnv(env)
+    # env = FireResetEnv(env)
     return env
 
 

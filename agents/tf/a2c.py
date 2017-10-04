@@ -3,6 +3,7 @@ from models import CNNAgent
 import gym
 import cv2
 import numpy as np
+
 from rollouts import Rollouts
 from envs.env_wrappers import make_env
 from envs.subproc_vec_env import SubprocVecEnv
@@ -10,8 +11,8 @@ from envs.subproc_vec_env import SubprocVecEnv
 
 class A2C(object):
     """A2C defines loss, optimization ops, and train ops"""
-    def __init__(self, env, model, rollout, nstack, grad_clip=1.0, obs_dim=(84, 84, 3),
-                 lr=1e-4, entropy_coeff=1e-2, value_coeff=0.5):
+    def __init__(self, env, model, rollout, nstack, grad_clip=0.5,
+                 lr=7e-4, entropy_coeff=1e-2, value_coeff=0.5):
         self.sess = tf.Session()
         self.nstack = nstack
         self.env = env
@@ -21,22 +22,28 @@ class A2C(object):
         self.advantage = tf.placeholder(dtype=tf.float32, shape=(None, ), name='advantage_holder')
         self.returns = tf.placeholder(dtype=tf.float32, shape=(None, ), name='return_holder')
 
-        policy_loss, entropy, value_loss = self.model.loss(self.returns, self.action_holder, self.advantage)
-        self.loss = policy_loss - entropy*entropy_coeff + value_coeff*value_loss
+        self.policy_loss, self.entropy, self.value_loss = self.model.loss(self.returns, self.action_holder, self.advantage)
+        self.loss = self.policy_loss - self.entropy*entropy_coeff + value_coeff*self.value_loss
         gradients = tf.gradients(self.loss, self.model.trainable_parameters())
         gradients, _ = tf.clip_by_global_norm(clip_norm=grad_clip, t_list=gradients)
         grad_param = [(grad, param) for grad, param in zip(gradients, self.model.trainable_parameters())]
 
         self.optimizer = tf.train.RMSPropOptimizer(learning_rate=lr)
         self.train_op = self.optimizer.apply_gradients(grad_param, name='optimize')
+        self.obs = self.env.reset()
+        self.rollout.observations[0] = self.obs
         self.sess.run(tf.global_variables_initializer())
 
     def step(self, obs, actions, returns, values):
         """Run a training step"""
         advs = returns - values
-        loss, _ = self.sess.run([self.loss, self.train_op],
-                                feed_dict={self.model.obs: obs, self.action_holder: actions,
-                                           self.advantage: advs, self.returns: returns})
+        loss, policy_loss, value_loss, entropy, _ = self.sess.run([self.loss, self.policy_loss,
+                                                                   self.value_loss, self.entropy, self.train_op],
+                                                                  feed_dict={self.model.obs: obs,
+                                                                             self.action_holder: actions,
+                                                                             self.advantage: advs,
+                                                                             self.returns: returns})
+        print(value_loss)
         return loss
 
     def colloect_trajectories(self):
@@ -44,13 +51,11 @@ class A2C(object):
 
         nsteps = self.rollout.nsteps
         # h*w*c
-        observations = self.env.reset()
-        self.rollout.observations[0] = observations
-        #for update in range(nupdates):
         for n in range(nsteps):
-            self.env.render()
-            action, sampled_action, value = self.model.act(observations)
+            action, sampled_action, value = self.model.act(self.obs)
+            # self.env.render()
             observations, rewards, dones, _ = self.env.step(sampled_action)
+            self.obs = observations
             self.rollout.update(n, dones, rewards, action, sampled_action, value, observations)
 
         _, _, value = self.model.act(observations)
@@ -66,19 +71,22 @@ class A2C(object):
             actions = self.rollout.actions.reshape(-1)
             observations = self.rollout.observations[:-1].reshape(-1, 84, 84, 4)
             self.step(observations, actions, returns, values)
-            print(self.rollout.rewards.mean())
+            if update % 10 == 0:
+                print('At update step-%s, reward is %s' %(update, self.rollout.rewards.mean()))
 
 
 if __name__ == '__main__':
-    nprocess = 4
+    nprocess = 6
     gamma = 0.99
-    nsteps = 500
+    nsteps = 10
 
-    envs = SubprocVecEnv([make_env('Pong-v0', 0, i, '../../logs') for i in range(0, nprocess)])
+    envs = SubprocVecEnv([make_env('MinecraftBasic-v0', 0, i, '../../logs') for i in range(0, 1)])
+    envs.init()
+    print(envs, envs.action_space)
     rollout = Rollouts(gamma=gamma, nprocess=nprocess, nsteps=nsteps, nactions=envs.action_space.n,
-                       obs_shape=envs.observation_space.shape)
+                        obs_shape=envs.observation_space.shape)
     a2c = A2C(envs, rollout=rollout, model=CNNAgent, nstack=4)
-    a2c.learn(100)
+    a2c.learn(5000)
     # a2c.colloect_trajectories()
     # envs.close()
     # print(rollout.observations.shape)

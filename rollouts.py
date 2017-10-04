@@ -2,6 +2,7 @@ import numpy as np
 from envs.subproc_vec_env import SubprocVecEnv
 from envs.env_wrappers import make_env
 
+
 class Rollouts(object):
     """
     This class stores rewards, observations, actions taken, terminal states, log probability of actions for each trail.
@@ -10,6 +11,9 @@ class Rollouts(object):
     def __init__(self, gamma, nprocess, nsteps, nactions, obs_shape):
         self.gamma = gamma
         self.nsteps = nsteps
+        self.nprocess = nprocess
+        self.obs_shape = obs_shape
+        self.nactions = nactions
         self.use_rgb = True if len(obs_shape) == 3 else False
         # need one more state to evaluate return[i]
         self.returns = np.zeros((nsteps + 1, nprocess))
@@ -37,7 +41,17 @@ class Rollouts(object):
         self.rewards[step] = rewards
 
     def clear(self):
-        pass
+        self.returns = np.zeros((self.nsteps + 1, self.nprocess))
+        if self.use_rgb:
+            h, w, c = self.obs_shape
+            self.observations = np.zeros((self.nsteps+1, self.nprocess, h, w, c))
+        else:
+            self.observations = np.zeros((self.nsteps+1, self.nprocess, self.obs_shape))
+        self.log_actions = np.zeros((self.nsteps, self.nprocess, self.nactions))
+        self.actions = np.zeros((self.nsteps, self.nprocess))
+        self.values = np.zeros((self.nsteps, self.nprocess))
+        self.dones = np.zeros((self.nsteps, self.nprocess))
+        self.rewards = np.zeros((self.nsteps, self.nprocess))
 
     def calc_returns(self, value):
         self.returns[-1] = value

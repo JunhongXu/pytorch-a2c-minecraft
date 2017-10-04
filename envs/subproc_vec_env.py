@@ -1,7 +1,7 @@
 """This module is copied from openai baselines: https://github.com/openai/baselines"""
 import numpy as np
 from multiprocessing import Process, Pipe
-
+from gym import Env
 
 class VecEnv(object):
     """
@@ -44,6 +44,17 @@ def worker(remote, env_fn_wrapper):
             remote.send((env.action_space, env.observation_space))
         elif cmd == 'render':
             env.render()
+        elif cmd == 'init':
+            env = env.env
+            while True:
+                if isinstance(env, Env):
+                    if hasattr(env, 'env'):
+                        env = env.env
+                    else:
+                        env.init(start_minecraft=True)
+                        break
+            remote.send('finish_init')
+
         else:
             raise NotImplementedError
 
@@ -90,6 +101,12 @@ class SubprocVecEnv(VecEnv):
         for remote in self.remotes:
             remote.send(('reset', None))
         return np.stack([remote.recv() for remote in self.remotes])
+
+    def init(self):
+        for i, remote in enumerate(self.remotes):
+            remote.send(('init', None))
+            remote.recv()
+            print('Sub process %s finishes' % i)
 
     def close(self):
         for remote in self.remotes:

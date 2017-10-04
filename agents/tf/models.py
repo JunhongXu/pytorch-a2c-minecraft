@@ -1,19 +1,38 @@
 import tensorflow as tf
 from tensorflow.contrib.layers import *
+from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
 import numpy as np
 
 
-def conv(x, out_channel, kernel_size, stride, name, init_scale=np.sqrt(2), padding='SAME'):
+def ortho_init(scale=1.0):
+    def _ortho_init(shape, dtype, partition_info=None):
+        #lasagne ortho init for tf
+        shape = tuple(shape)
+        if len(shape) == 2:
+            flat_shape = shape
+        elif len(shape) == 4: # assumes NHWC
+            flat_shape = (np.prod(shape[:-1]), shape[-1])
+        else:
+            raise NotImplementedError
+        a = np.random.normal(0.0, 1.0, flat_shape)
+        u, _, v = np.linalg.svd(a, full_matrices=False)
+        q = u if u.shape == flat_shape else v # pick the one with the correct shape
+        q = q.reshape(shape)
+        return (scale * q[:shape[0], :shape[1]]).astype(np.float32)
+    return _ortho_init
+
+
+def conv(x, out_channel, kernel_size, stride, name, initializer=None, padding='SAME'):
     with tf.variable_scope(name):
         x = conv2d(
             x, num_outputs=out_channel, kernel_size=kernel_size,
             padding=padding, stride=stride, activation_fn=tf.nn.elu,
-            weights_initializer=tf.orthogonal_initializer(gain=init_scale)
+            weights_initializer=initializer
         )
     return x
 
 
-def dense(x, num_outputs, name, initializer, activation_fn=tf.nn.elu):
+def dense(x, num_outputs, name, initializer=ortho_init(1.0), activation_fn=tf.nn.elu):
     with tf.variable_scope(name):
         shape = x.get_shape().ndims
         if shape > 2:
@@ -37,12 +56,12 @@ class CNNAgent(object):
         self.obs = tf.placeholder(tf.float32, self.obs_shape, name='observations')
 
         with tf.variable_scope('model', reuse=reuse):
-            conv1 = conv(self.obs, 32, 8, 4, 'conv1')
-            conv2 = conv(conv1, 64, 4, 2, 'conv2')
-            conv3 = conv(conv2, 64, 3, 1, 'conv3')
+            conv1 = conv(self.obs/255., 32, 8, 4, 'conv1', initializer=ortho_init(np.sqrt(2)))
+            conv2 = conv(conv1, 64, 4, 2, 'conv2', initializer=ortho_init(np.sqrt(2)))
+            conv3 = conv(conv2, 64, 3, 1, 'conv3', initializer=ortho_init(np.sqrt(2)))
             fc1 = dense(conv3, 256, 'fc1', initializer=tf.orthogonal_initializer(1))
-            self.policy = dense(fc1, action_space, 'policy', initializer=tf.orthogonal_initializer(1), activation_fn=None)
-            self.value = dense(fc1, 1, 'value', initializer=tf.orthogonal_initializer(1), activation_fn=None)
+            self.policy = dense(fc1, action_space, 'policy', activation_fn=None)
+            self.value = dense(fc1, 1, 'value', activation_fn=None)
             self.sampled_action = tf.squeeze(tf.multinomial(tf.log(self.policy), 1), squeeze_dims=1)
 
     def trainable_parameters(self):
