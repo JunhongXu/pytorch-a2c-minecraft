@@ -3,7 +3,7 @@ from models import CNNAgent
 import gym
 import cv2
 import numpy as np
-
+from envs.atari_wrappers import wrap_deepmind
 from rollouts import Rollouts
 from envs.env_wrappers import make_env
 from envs.subproc_vec_env import SubprocVecEnv
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     gamma = 0.99
     nsteps = 5
 
-    envs = SubprocVecEnv([make_env('Breakout-v0', 0, i, '../../logs') for i in range(0, nprocess)])
+    envs = SubprocVecEnv([make_env('BreakoutNoFrameskip-v4', 0, i, '../../logs', wrap=wrap_deepmind) for i in range(0, nprocess)])
     # envs.init()
     # print(envs, envs.action_space)
     rollout = Rollouts(gamma=gamma, nprocess=nprocess, nsteps=nsteps, nactions=envs.action_space.n,

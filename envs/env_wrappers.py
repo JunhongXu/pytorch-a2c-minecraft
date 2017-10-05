@@ -69,16 +69,16 @@ class FireResetEnv(gym.Wrapper):
             self.env.reset()
         return obs
 
+#
+# def wrap(env):
+#     env = ClipRewardEnv(env)
+#     env = WarpFrame(env, 84, 84, 1)
+#     env = FrameStack(env, 4)
+#     env = FireResetEnv(env)
+#     return env
 
-def wrap(env):
-    env = ClipRewardEnv(env)
-    env = WarpFrame(env, 84, 84, 1)
-    env = FrameStack(env, 4)
-    env = FireResetEnv(env)
-    return env
 
-
-def make_env(env_id, seed, rank, log_dir):
+def make_env(env_id, seed, rank, log_dir, wrap):
     def _thunk():
         env = gym.make(env_id)
         env.seed(seed + rank)
