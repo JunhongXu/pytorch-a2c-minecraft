@@ -8,6 +8,7 @@ from rollouts import Rollouts
 from envs.env_wrappers import make_env
 from envs.subproc_vec_env import SubprocVecEnv
 
+tf.set_random_seed(0)
 
 class A2C(object):
     """A2C defines loss, optimization ops, and train ops"""
@@ -43,8 +44,7 @@ class A2C(object):
                                                                              self.action_holder: actions,
                                                                              self.advantage: advs,
                                                                              self.returns: returns})
-        print(value_loss, entropy)
-        return loss
+        return loss, policy_loss, value_loss, entropy
 
     def colloect_trajectories(self):
         """store rollouts in side Rollouts object"""
@@ -70,9 +70,11 @@ class A2C(object):
             values = self.rollout.values.reshape(-1)
             actions = self.rollout.actions.reshape(-1)
             observations = self.rollout.observations.reshape(-1, 84, 84, 4)
-            self.step(observations, actions, returns, values)
+            _, policy_loss, value_loss, entropy = self.step(observations, actions, returns, values)
             if update % 10 == 0:
-                print('At update step-%s, reward is %s' %(update, self.rollout.rewards.mean()))
+                print('Step | Rewards | Policy loss | Value loss | Entropy')
+                print('%s | %.4f | %.4f | %.4f | %.4f' %(update, self.rollout.rewards.mean(),
+                                                         policy_loss, value_loss, entropy))
 
 
 if __name__ == '__main__':
@@ -86,7 +88,7 @@ if __name__ == '__main__':
     rollout = Rollouts(gamma=gamma, nprocess=nprocess, nsteps=nsteps, nactions=envs.action_space.n,
                         obs_shape=envs.observation_space.shape)
     a2c = A2C(envs, rollout=rollout, model=CNNAgent, nstack=4)
-    a2c.learn(5000)
+    a2c.learn(75000)
     # a2c.colloect_trajectories()
     # envs.close()
     # print(rollout.observations.shape)
