@@ -19,9 +19,9 @@ class Rollouts(object):
         self.returns = np.zeros((nsteps + 1, nprocess))
         if self.use_rgb:
             h, w, c = obs_shape
-            self.observations = np.zeros((nsteps+1, nprocess, h, w, c))
+            self.observations = np.zeros((nsteps, nprocess, h, w, c))
         else:
-            self.observations = np.zeros((nsteps+1, nprocess, obs_shape))
+            self.observations = np.zeros((nsteps, nprocess, obs_shape))
         self.log_actions = np.zeros((nsteps, nprocess, nactions))
         self.actions = np.zeros((nsteps, nprocess))
         self.values = np.zeros((nsteps, nprocess))
@@ -33,7 +33,7 @@ class Rollouts(object):
             update the current rollout buffer
         """
         # update observation, update from t1, t0 is reset observations
-        self.observations[step + 1] = observations
+        self.observations[step] = observations
         self.log_actions[step] = log_actions
         self.actions[step] = actions
         self.values[step] = values
@@ -44,9 +44,9 @@ class Rollouts(object):
         self.returns = np.zeros((self.nsteps + 1, self.nprocess))
         if self.use_rgb:
             h, w, c = self.obs_shape
-            self.observations = np.zeros((self.nsteps+1, self.nprocess, h, w, c))
+            self.observations = np.zeros((self.nsteps, self.nprocess, h, w, c))
         else:
-            self.observations = np.zeros((self.nsteps+1, self.nprocess, self.obs_shape))
+            self.observations = np.zeros((self.nsteps, self.nprocess, self.obs_shape))
         self.log_actions = np.zeros((self.nsteps, self.nprocess, self.nactions))
         self.actions = np.zeros((self.nsteps, self.nprocess))
         self.values = np.zeros((self.nsteps, self.nprocess))

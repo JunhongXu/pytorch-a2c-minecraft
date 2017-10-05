@@ -22,7 +22,7 @@ def ortho_init(scale=1.0):
     return _ortho_init
 
 
-def conv(x, out_channel, kernel_size, stride, name, initializer=None, padding='SAME'):
+def conv(x, out_channel, kernel_size, stride, name, initializer=None, padding='VALID'):
     with tf.variable_scope(name):
         x = conv2d(
             x, num_outputs=out_channel, kernel_size=kernel_size,
@@ -59,7 +59,7 @@ class CNNAgent(object):
             conv1 = conv(self.obs/255., 32, 8, 4, 'conv1', initializer=ortho_init(np.sqrt(2)))
             conv2 = conv(conv1, 64, 4, 2, 'conv2', initializer=ortho_init(np.sqrt(2)))
             conv3 = conv(conv2, 64, 3, 1, 'conv3', initializer=ortho_init(np.sqrt(2)))
-            fc1 = dense(conv3, 256, 'fc1', initializer=tf.orthogonal_initializer(1))
+            fc1 = dense(conv3, 512, 'fc1', initializer=tf.orthogonal_initializer(2))
             self.policy = dense(fc1, action_space, 'policy', activation_fn=None)
             self.value = dense(fc1, 1, 'value', activation_fn=None)
             self.sampled_action = tf.squeeze(tf.multinomial(tf.log(self.policy), 1), squeeze_dims=1)
@@ -90,8 +90,8 @@ class CNNAgent(object):
 
         # nenvs*nsteps, nactions
         action_probs = tf.nn.softmax(self.policy)
-        entropy = -tf.log(action_probs) * action_probs
-        entropy = tf.reduce_mean(tf.reduce_sum(entropy, axis=1), name='entropy')
+        entropy = tf.log(action_probs) * action_probs
+        entropy = tf.reduce_mean(-tf.reduce_sum(entropy, axis=1), name='entropy')
 
         value_loss = tf.reduce_mean(tf.square(self.value - rs), name='value_loss')
         return policy_loss, entropy, value_loss

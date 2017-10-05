@@ -12,7 +12,7 @@ from envs.subproc_vec_env import SubprocVecEnv
 class A2C(object):
     """A2C defines loss, optimization ops, and train ops"""
     def __init__(self, env, model, rollout, nstack, grad_clip=0.5,
-                 lr=7e-4, entropy_coeff=1e-2, value_coeff=0.5):
+                 lr=7e-4, entropy_coeff=5e-2, value_coeff=0.5):
         self.sess = tf.Session()
         self.nstack = nstack
         self.env = env
@@ -28,7 +28,7 @@ class A2C(object):
         gradients, _ = tf.clip_by_global_norm(clip_norm=grad_clip, t_list=gradients)
         grad_param = [(grad, param) for grad, param in zip(gradients, self.model.trainable_parameters())]
 
-        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=lr)
+        self.optimizer = tf.train.RMSPropOptimizer(learning_rate=lr, decay=0.99, epsilon=1e-5)
         self.train_op = self.optimizer.apply_gradients(grad_param, name='optimize')
         self.obs = self.env.reset()
         self.rollout.observations[0] = self.obs
@@ -43,17 +43,16 @@ class A2C(object):
                                                                              self.action_holder: actions,
                                                                              self.advantage: advs,
                                                                              self.returns: returns})
-        print(value_loss)
+        print(value_loss, entropy)
         return loss
 
     def colloect_trajectories(self):
         """store rollouts in side Rollouts object"""
 
         nsteps = self.rollout.nsteps
-        # h*w*c
         for n in range(nsteps):
             action, sampled_action, value = self.model.act(self.obs)
-            # self.env.render()
+            self.env.render()
             observations, rewards, dones, _ = self.env.step(sampled_action)
             self.obs = observations
             self.rollout.update(n, dones, rewards, action, sampled_action, value, observations)
@@ -61,6 +60,7 @@ class A2C(object):
         _, _, value = self.model.act(observations)
         self.rollout.values[-1] = value
         self.rollout.calc_returns(value)
+        # print(self.rollout.returns)
 
     def learn(self, nupdates):
         for update in range(nupdates):
@@ -69,20 +69,20 @@ class A2C(object):
             returns = self.rollout.returns[:-1].reshape(-1)
             values = self.rollout.values.reshape(-1)
             actions = self.rollout.actions.reshape(-1)
-            observations = self.rollout.observations[:-1].reshape(-1, 84, 84, 4)
+            observations = self.rollout.observations.reshape(-1, 84, 84, 4)
             self.step(observations, actions, returns, values)
             if update % 10 == 0:
                 print('At update step-%s, reward is %s' %(update, self.rollout.rewards.mean()))
 
 
 if __name__ == '__main__':
-    nprocess = 6
+    nprocess = 16
     gamma = 0.99
-    nsteps = 10
+    nsteps = 5
 
-    envs = SubprocVecEnv([make_env('MinecraftBasic-v0', 0, i, '../../logs') for i in range(0, 1)])
-    envs.init()
-    print(envs, envs.action_space)
+    envs = SubprocVecEnv([make_env('Breakout-v0', 0, i, '../../logs') for i in range(0, nprocess)])
+    # envs.init()
+    # print(envs, envs.action_space)
     rollout = Rollouts(gamma=gamma, nprocess=nprocess, nsteps=nsteps, nactions=envs.action_space.n,
                         obs_shape=envs.observation_space.shape)
     a2c = A2C(envs, rollout=rollout, model=CNNAgent, nstack=4)

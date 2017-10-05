@@ -115,8 +115,7 @@ class SubprocVecEnv(VecEnv):
             p.join()
 
     def render(self):
-        for remote in self.remotes:
-            remote.send(('render', None))
+        self.remotes[0].send(('render', None))
 
     @property
     def num_envs(self):
