@@ -4,25 +4,26 @@ import gym
 import cv2
 import numpy as np
 from envs.atari_wrappers import wrap_deepmind
+from envs.env_wrappers import wrapper
 from rollouts import Rollouts
 from envs.env_wrappers import make_env
 from envs.subproc_vec_env import SubprocVecEnv
 
 tf.set_random_seed(0)
 
+
 class A2C(object):
     """A2C defines loss, optimization ops, and train ops"""
-    def __init__(self, env, model, rollout, nstack, grad_clip=0.5,
-                 lr=7e-4, entropy_coeff=5e-2, value_coeff=0.5):
+    def __init__(self, env, model, rollout, grad_clip=0.5,
+                 lr=5e-4, entropy_coeff=5e-2, value_coeff=0.5):
         self.sess = tf.Session()
-        self.nstack = nstack
         self.env = env
         self.rollout = rollout
         self.model = model(env, self.sess)
         self.action_holder = tf.placeholder(dtype=tf.int32, shape=(None, ), name='action_holder')
         self.advantage = tf.placeholder(dtype=tf.float32, shape=(None, ), name='advantage_holder')
         self.returns = tf.placeholder(dtype=tf.float32, shape=(None, ), name='return_holder')
-
+        self.h, self.w, self.c = env.observation_space.shape
         self.policy_loss, self.entropy, self.value_loss = self.model.loss(self.returns, self.action_holder, self.advantage)
         self.loss = self.policy_loss - self.entropy*entropy_coeff + value_coeff*self.value_loss
         gradients = tf.gradients(self.loss, self.model.trainable_parameters())
@@ -34,6 +35,8 @@ class A2C(object):
         self.obs = self.env.reset()
         self.rollout.observations[0] = self.obs
         self.sess.run(tf.global_variables_initializer())
+        self.rewards = 0
+        self.steps = 0
 
     def step(self, obs, actions, returns, values):
         """Run a training step"""
@@ -51,11 +54,20 @@ class A2C(object):
 
         nsteps = self.rollout.nsteps
         for n in range(nsteps):
+            # get a_t, v_t
             action, sampled_action, value = self.model.act(self.obs)
             self.env.render()
+            # get o_t+1, r_t, done_t
             observations, rewards, dones, _ = self.env.step(sampled_action)
+            self.rewards += rewards[0]
+            rewards = np.sign(rewards)
+            # collect o_t, r_t, a_t, v_t to rollout
+            self.rollout.update(n, dones, rewards, action, sampled_action, value, self.obs)
             self.obs = observations
-            self.rollout.update(n, dones, rewards, action, sampled_action, value, observations)
+            # get average reward for the first environment
+            if dones[0]:
+                print('Averaged rewards:%.4f' % (self.rewards))
+                self.rewards = 0
 
         _, _, value = self.model.act(observations)
         self.rollout.values[-1] = value
@@ -69,7 +81,7 @@ class A2C(object):
             returns = self.rollout.returns[:-1].reshape(-1)
             values = self.rollout.values.reshape(-1)
             actions = self.rollout.actions.reshape(-1)
-            observations = self.rollout.observations.reshape(-1, 84, 84, 4)
+            observations = self.rollout.observations.reshape(-1, self.h, self.w, self.c)
             _, policy_loss, value_loss, entropy = self.step(observations, actions, returns, values)
             if update % 10 == 0:
                 print('Step | Rewards | Policy loss | Value loss | Entropy')
@@ -78,36 +90,13 @@ class A2C(object):
 
 
 if __name__ == '__main__':
-    nprocess = 16
+    nprocess = 4
     gamma = 0.99
-    nsteps = 5
+    nsteps = 30
 
-    envs = SubprocVecEnv([make_env('BreakoutNoFrameskip-v4', 0, i, '../../logs', wrap=wrap_deepmind) for i in range(0, nprocess)])
-    # envs.init()
-    # print(envs, envs.action_space)
+    envs = SubprocVecEnv([make_env('MinecraftBasic-v0', 0, i, '../../logs', wrap=wrapper) for i in range(0, nprocess)], minecraft=True)
+
     rollout = Rollouts(gamma=gamma, nprocess=nprocess, nsteps=nsteps, nactions=envs.action_space.n,
-                        obs_shape=envs.observation_space.shape)
-    a2c = A2C(envs, rollout=rollout, model=CNNAgent, nstack=4)
-    a2c.learn(75000)
-    # a2c.colloect_trajectories()
-    # envs.close()
-    # print(rollout.observations.shape)
-    # print(rollout.rewards.shape)
-
-    # import cv2
-    #
-    # for p in range(nprocess):
-    #     for s in range(nsteps+1):
-    #         for stack in range(4):
-    #             cv2.imshow('step_%s_process_%s_stack_%s' % (s, p, stack), rollout.observations[s, p, :, :, stack])
-    #         cv2.waitKey()
-    # obs = cv2.resize(env.reset(), (84, 84))
-    # obs = np.repeat(obs, 4, axis=2)
-    # obs = obs[np.newaxis, :, :, :]/255.
-    #
-    # action_logits, sampled_action, values = a2c.model.act(obs)
-    # print(action_logits, sampled_action, values)
-    #
-    # rewards = np.array([1.0])
-    # loss = a2c.step(obs, sampled_action, rewards, values)
-    # print(loss)
+                        obs_shape=envs.observation_space.shape) # nstack=1)
+    a2c = A2C(envs, rollout=rollout, model=CNNAgent)
+    a2c.learn(175000)

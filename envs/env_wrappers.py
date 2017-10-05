@@ -39,6 +39,7 @@ class FrameStack(gym.Wrapper):
     def _step(self, action):
         ob, reward, done, info = self.env.step(action)
         self.frames.append(ob)
+        ##### print(ob.shape)
         return self._observation(), reward, done, info
 
     def _observation(self):
@@ -69,13 +70,12 @@ class FireResetEnv(gym.Wrapper):
             self.env.reset()
         return obs
 
-#
-# def wrap(env):
-#     env = ClipRewardEnv(env)
-#     env = WarpFrame(env, 84, 84, 1)
-#     env = FrameStack(env, 4)
-#     env = FireResetEnv(env)
-#     return env
+
+def wrapper(env):
+    env = ClipRewardEnv(env)
+    env = WarpFrame(env, 84, 84, 1)
+    env = FrameStack(env, 4)
+    return env
 
 
 def make_env(env_id, seed, rank, log_dir, wrap):

@@ -39,12 +39,11 @@ class CNNPolicy(nn.Module):
         x = self.fc1(x)
         act_logits = self.action(x)
         value = self.value(x)
-
         return act_logits, value
 
     def act(self, x):
         action, _ = self.forward(x)
-        # return action.
+        return action.multinomial().data
 
     @staticmethod
     def __make_conv_elu(input_feats, output_feats, size, stride, padding=0):

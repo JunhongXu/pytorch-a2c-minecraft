@@ -26,13 +26,13 @@ def conv(x, out_channel, kernel_size, stride, name, initializer=None, padding='V
     with tf.variable_scope(name):
         x = conv2d(
             x, num_outputs=out_channel, kernel_size=kernel_size,
-            padding=padding, stride=stride, activation_fn=tf.nn.elu,
+            padding=padding, stride=stride, activation_fn=tf.nn.relu,
             weights_initializer=initializer
         )
     return x
 
 
-def dense(x, num_outputs, name, initializer=ortho_init(1.0), activation_fn=tf.nn.elu):
+def dense(x, num_outputs, name, initializer=ortho_init(1.0), activation_fn=tf.nn.relu):
     with tf.variable_scope(name):
         shape = x.get_shape().ndims
         if shape > 2:
@@ -62,7 +62,11 @@ class CNNAgent(object):
             fc1 = dense(conv3, 512, 'fc1', initializer=tf.orthogonal_initializer(2))
             self.policy = dense(fc1, action_space, 'policy', activation_fn=None)
             self.value = dense(fc1, 1, 'value', activation_fn=None)
-            self.sampled_action = tf.squeeze(tf.multinomial(tf.log(self.policy), 1), squeeze_dims=1)
+            self.sampled_action = self.sample()
+
+    def sample(self):
+        noise = tf.random_uniform(tf.shape(self.policy))
+        return tf.argmax(self.policy - tf.log(-tf.log(noise)), 1)
 
     def trainable_parameters(self):
         return tf.trainable_variables()
@@ -84,14 +88,20 @@ class CNNAgent(object):
         actions: placeholder, holds the value of actions taken in each trail shape(nenvs*nsteps)
         advantage: placeholder, holds the value of advantage estimation shape(nenvs*nsteps)
         """
+        def cat_entropy(logits):
+            a0 = logits - tf.reduce_max(logits, 1, keep_dims=True)
+            ea0 = tf.exp(a0)
+            z0 = tf.reduce_sum(ea0, 1, keep_dims=True)
+            p0 = ea0 / z0
+            return tf.reduce_sum(p0 * (tf.log(z0) - a0), 1)
         # negative log probability loss -log(softmax(actions))
         neg_log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.policy, labels=actions, name='nll')
         policy_loss = tf.reduce_mean(neg_log_prob * advantage, name='policy_loss')
 
         # nenvs*nsteps, nactions
-        action_probs = tf.nn.softmax(self.policy)
-        entropy = tf.log(action_probs) * action_probs
-        entropy = tf.reduce_mean(-tf.reduce_sum(entropy, axis=1), name='entropy')
+        # action_probs = tf.nn.softmax(self.policy)
+        entropy = tf.reduce_mean(cat_entropy(self.policy))
+        # entropy = tf.reduce_mean(-tf.reduce_sum(entropy, axis=1), name='entropy')
 
         value_loss = tf.reduce_mean(tf.square(self.value - rs), name='value_loss')
         return policy_loss, entropy, value_loss

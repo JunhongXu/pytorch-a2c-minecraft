@@ -51,7 +51,7 @@ def worker(remote, env_fn_wrapper):
                     if hasattr(env, 'env'):
                         env = env.env
                     else:
-                        env.init(start_minecraft=True)
+                        env.init(start_minecraft=True, videoResolution=(128, 128), allowDiscreteMovement=["move", "turn"])
                         break
             remote.send('finish_init')
 
@@ -76,7 +76,7 @@ class CloudpickleWrapper(object):
 
 
 class SubprocVecEnv(VecEnv):
-    def __init__(self, env_fns):
+    def __init__(self, env_fns, minecraft=False):
         """
         envs: list of gym environments to run in subprocesses
         """
@@ -86,6 +86,9 @@ class SubprocVecEnv(VecEnv):
             for (work_remote, env_fn) in zip(self.work_remotes, env_fns)]
         for p in self.ps:
             p.start()
+
+        if minecraft:
+            self.init()
 
         self.remotes[0].send(('get_spaces', None))
         self.action_space, self.observation_space = self.remotes[0].recv()
@@ -104,6 +107,7 @@ class SubprocVecEnv(VecEnv):
 
     def init(self):
         for i, remote in enumerate(self.remotes):
+            print('Sub process %s starts' % i)
             remote.send(('init', None))
             remote.recv()
             print('Sub process %s finishes' % i)
