@@ -15,7 +15,7 @@ tf.set_random_seed(0)
 class A2C(object):
     """A2C defines loss, optimization ops, and train ops"""
     def __init__(self, env, model, rollout, grad_clip=0.5,
-                 lr=5e-4, entropy_coeff=5e-2, value_coeff=0.5):
+                 lr=1e-4, entropy_coeff=5e-2, value_coeff=0.5):
         self.sess = tf.Session()
         self.env = env
         self.rollout = rollout

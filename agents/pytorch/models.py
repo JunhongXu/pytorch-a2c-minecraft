@@ -1,104 +1,142 @@
-import torch
-import torch.nn as nn
+from policies import CNNPolicy, MLP
+from torch.optim import RMSprop, Adam
+from rollouts import Rollouts
 from torch.nn import functional as F
+import torch.nn as nn
+import torch
+from torch.autograd import Variable
+import numpy as np
+
+class A2C(object):
+    def __init__(self, envs, model, gamma, v_coeff, e_coeff, lr, nstack, nprocess):
+        h, w, c = envs.observation_space.shape
+        c = nstack * c
+        # self.rollout = Rollouts()
 
 
-class CNNPolicy(nn.Module):
-    def __init__(self, obs_space, num_actions):
-        """64*3*3 -> 128*3*3 -> 256*3*3 -> 512"""
-        super(CNNPolicy, self).__init__()
-        h, w = obs_space
-        self.obs_space = obs_space
-        self.num_actions = num_actions
+class PolicyGradient(object):
+    def __init__(self, env, gamma, lr, max_step=1500):
+        """
+        REINFORCE algorithm with advantage estimation
+        """
+        self.env = env
+        self.nactions = env.action_space.n
+        self.nobservation = env.observation_space.shape[0]
+        self.model = MLP(num_actions=self.nactions, num_obs=self.nobservation)
+        self.model.cuda()
+        self.gamma = gamma
+        self.optimizer = Adam(params=self.model.parameters(), lr=lr)
+        self.max_step = max_step
 
-        self.conv1 = self.__make_conv_elu(3, 32, 8, 4)
-        self.conv2 = self.__make_conv_elu(32, 64, 4, 2)
-        self.conv3 = self.__make_conv_elu(64, 64, 3, 1)
+    def calculate_returns(self, rewards):
+        nstep = rewards.shape[0]
+        # print(nstep)
+        returns = np.zeros(nstep)
+        returns[-1] = rewards[-1]
+        for i in reversed(range(0, nstep-1)):
+            returns[i] = self.gamma * returns[i+1] + rewards[i]
+        return returns
 
-        self.fc1 = nn.Sequential(
-            nn.Linear(64*49, 512),
-            nn.ELU()
-        )
+    def run_episode(self):
+        """
+        Run through one episode of the game and collect episode_values, episode_rewards, episode_obs, episode_actions
+        and calculate returns
+        """
+        episode_rewards = []
+        episode_actions = []
+        episode_obs = []
+        episode_values = []
+        step_obs = self.env.reset()
+        total_reward = 0.0
+        done = False
+        step = 0
+        # while step != self.max_step:
+        while not done:
+            # self.env.render()
+            # add observation to buffer
+            episode_obs.append(step_obs)  # act
+            obs_tensor = Variable(torch.from_numpy(step_obs[np.newaxis, :]).float(), volatile=True).cuda()
+            step_action, step_value = self.model.act(obs_tensor)
+            step_action, step_value = step_action.cpu().numpy()[0][0], step_value.cpu().numpy()[0][0]
 
-        self.value = nn.Linear(512, 1)
-        self.action = nn.Linear(512, num_actions)
+            # step
+            step_obs, step_rewards, done, _ = self.env.step(step_action)
+            # add reward, action, value to buffer
+            episode_rewards.append(step_rewards)
+            episode_actions.append(step_action)
+            episode_values.append(step_value)
+            step += 1
+            total_reward += step_rewards
+        if done:
+            episode_rewards.append(0)
+        #
+        # if done:
+        #     # append 0 value to episode_rewards
+        #     episode_rewards.append(0)
+        # else:
+        #     # bootstrap from the last state
+        #     obs_tensor = Variable(torch.from_numpy(step_obs[np.newaxis, :]).float(), volatile=True).cuda()
+        #     _, value = self.model.act(obs_tensor)
+        #     value = value.cpu().numpy()[0][0]
+        #     episode_rewards.append(value)
 
-        self.init_weight()
+        return np.asarray(episode_obs), np.asarray(episode_rewards), np.asarray(episode_actions), np.asarray(episode_values), total_reward
 
-    def init_weight(self):
-        for module in self.modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
-                module.bias.data.zero_()
-                nn.init.orthogonal(module.weight.data)
+    def train(self, returns, obs, actions):
+        # nstep = returns.shape[0]
+        returns = Variable(torch.from_numpy(returns).cuda()).float()
+        obs = Variable(torch.from_numpy(obs).cuda()).float()
+        actions = Variable(torch.LongTensor(actions)).cuda().view(-1, 1)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.conv3(x)
-        x = x.view(x.size(0), -1)
-        x = self.fc1(x)
-        act_logits = self.action(x)
-        value = self.value(x)
-        return act_logits, value
-
-    def act(self, x):
-        action, _ = self.forward(x)
-        return action.multinomial().data
-
-    @staticmethod
-    def __make_conv_elu(input_feats, output_feats, size, stride, padding=0):
-        return nn.Sequential(nn.Conv2d(input_feats, output_feats, kernel_size=size, stride=stride, padding=padding), nn.ELU())
-
-
-class MLP(nn.Module):
-    def __init__(self, num_obs, num_actions):
-        """obs->256->256->(num_actions, value)"""
-        super(MLP, self).__init__()
-        self.fc1 = nn.Sequential(
-            nn.Linear(num_obs, 256),
-            nn.ELU()
-        )
-
-        self.fc2 = nn.Sequential(
-            nn.Linear(256, 256),
-            nn.ELU()
-        )
-
-        self.action = nn.Linear(256, num_actions)
-        self.value = nn.Linear(256, 1)
-
-        self.init_weight()
-
-    def init_weight(self):
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                nn.init.orthogonal(module.weight.data)
-                module.bias.data.zero_()
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.fc2(x)
-        act_logits = self.action(x)
-        value = self.value(x)
-        return act_logits, value
-
-    def act(self, x):
-        """returns predicted action and value for a given state"""
-        logits, values = self.forward(x)
-        # N*NUM_ACT
-        probs = F.softmax(logits)
-        # N*1
-        actions = probs.multinomial()
-        return actions, values
+        logits, train_values = self.model.forward(obs)
+        advantage = returns - train_values.view(-1)
+        # print(returns.size(), train_values.size())
+        # print(advantage.data)
+        # print(returns, train_values)
+        log_logits = F.log_softmax(logits)
+        selected_logtis = log_logits.gather(1, actions).view(-1)
+        # print('Logits', selected_logtis)
+        # print('Softmax log', F.softmax(logits))
+        # print(torch.LongTensor(actions).cuda())
+        # print(logits)
+        policy_loss = -Variable(advantage.data) * selected_logtis
+        # print('advantage', advantage)
+        # print('logits', logits.gather(1, Variable(torch.LongTensor(actions)).cuda().view(-1, 1)))
+        # print('softmax', F.log_softmax(logits.gather(1, Variable(torch.LongTensor(actions)).cuda().view(-1, 1))))
+        policy_loss = torch.mean(policy_loss)
+        entropy = log_logits * F.softmax(logits)
+        entropy = - entropy.sum(-1).mean()
+        mse = torch.mean(torch.pow(advantage, 2))
+        loss = policy_loss + mse - entropy * 0.02
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm(self.model.parameters(), 1.0)
+        self.optimizer.step()
+        return loss, policy_loss, mse, advantage, train_values
 
 
 if __name__ == '__main__':
-    import numpy as np
-    from torch.autograd import Variable
-    cnn = CNNPolicy((84, 84), 4)
-    cnn.cuda()
-    obs = np.random.randn(1, 3, 84, 84)
-    obs = torch.from_numpy(obs).float()
-    obs = Variable(obs).cuda()
-
-    cnn(obs)
+    import gym
+    pg = PolicyGradient(gym.make('CartPole-v0'), 0.99, 1e-2, max_step=500)
+    r = 0
+    for i in range(0, 10000):
+        obs, rws, acts, values, total_reward = pg.run_episode()
+        # print(obs.shape, rws.shape, acts.shape)
+        # print(obs.shape)
+        # print(rws.shape)
+        # print(acts.shape)
+        # print(values.shape)
+        returns = pg.calculate_returns(rws)
+        # print(rws, returns)
+        loss, pl, mse, adv, tv = pg.train(returns[:-1], obs=obs, actions=acts)
+        # print(pl.data[0], mse.data[0])
+        # print(loss, pl, mse)
+        # print(adv)
+        # print(tv)
+        r += total_reward
+        if i % 100 == 0:
+            print('Update', i, r/100)
+            r = 0
+    # print(returns)
+    # print(rws)
+    # print(values)

@@ -59,7 +59,7 @@ class CNNAgent(object):
             conv1 = conv(self.obs/255., 32, 8, 4, 'conv1', initializer=ortho_init(np.sqrt(2)))
             conv2 = conv(conv1, 64, 4, 2, 'conv2', initializer=ortho_init(np.sqrt(2)))
             conv3 = conv(conv2, 64, 3, 1, 'conv3', initializer=ortho_init(np.sqrt(2)))
-            fc1 = dense(conv3, 512, 'fc1', initializer=tf.orthogonal_initializer(2))
+            fc1 = dense(conv3, 512, 'fc1', initializer=tf.orthogonal_initializer(np.sqrt(2)))
             self.policy = dense(fc1, action_space, 'policy', activation_fn=None)
             self.value = dense(fc1, 1, 'value', activation_fn=None)
             self.sampled_action = self.sample()
