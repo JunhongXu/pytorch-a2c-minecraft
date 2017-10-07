@@ -7,11 +7,11 @@ class CNNPolicy(nn.Module):
     def __init__(self, obs_space, num_actions):
         """64*3*3 -> 128*3*3 -> 256*3*3 -> 512"""
         super(CNNPolicy, self).__init__()
-        h, w = obs_space
+        h, w, c = obs_space
         self.obs_space = obs_space
         self.num_actions = num_actions
 
-        self.conv1 = self.__make_conv_elu(3, 32, 8, 4)
+        self.conv1 = self.__make_conv_elu(c, 32, 8, 4)
         self.conv2 = self.__make_conv_elu(32, 64, 4, 2)
         self.conv3 = self.__make_conv_elu(64, 64, 3, 1)
 
@@ -55,17 +55,17 @@ class MLP(nn.Module):
         """obs->256->256->(num_actions, value)"""
         super(MLP, self).__init__()
         self.fc1 = nn.Sequential(
-            nn.Linear(num_obs, 128),
+            nn.Linear(num_obs, 256),
             nn.ELU()
         )
 
-        # self.fc2 = nn.Sequential(
-        #     nn.Linear(8, 8),
-        #     nn.ELU()
-        # )
+        self.fc2 = nn.Sequential(
+            nn.Linear(256, 256),
+            nn.ELU()
+        )
 
-        self.action = nn.Linear(128, num_actions)
-        self.value = nn.Linear(128, 1)
+        self.action = nn.Linear(256, num_actions)
+        self.value = nn.Linear(256, 1)
 
         self.init_weight()
 
