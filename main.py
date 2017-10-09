@@ -14,7 +14,7 @@ if __name__ == '__main__':
     #     if i % 100 == 0:
     #         print('Update', i, r / 100, mse.data[0], entropy.data[0], pl.data[0])
     #         r = 0
-    nprocess = 4
+    nprocess = 6
     gamma = 0.99
     nsteps = 30
 
@@ -22,9 +22,9 @@ if __name__ == '__main__':
     from agents.pytorch.policies import CNNPolicy, MLP
     from agents.pytorch.models import A2C
 
-    a2c = A2C(envs, model=CNNPolicy, nstep=nsteps, nstack=4, lr=1e-5, e_coeff=0.05)
+    a2c = A2C(envs, model=CNNPolicy, nstep=nsteps, nstack=4, lr=1e-5, e_coeff=0.02, v_coeff=0.5)
     total = 0
-    for e in range(0, 10000):
+    for e in range(0, 50000):
         episode_obs, episode_rws, episode_values, episode_actions, episode_dones, returns, final_reward = a2c.run_episode(e)
         total += final_reward
         loss, policy_loss, mse, advantage, train_values, entropy = a2c.train(returns, episode_obs, episode_actions)

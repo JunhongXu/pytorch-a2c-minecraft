@@ -29,7 +29,6 @@ class A2C(object):
         self.model.cuda()
         # start environment
         self.step_obs = envs.reset()
-
         self.optimizer = Adam(params=self.model.parameters(), lr=lr)
 
     def run_episode(self, episode):
@@ -44,7 +43,7 @@ class A2C(object):
         for step in range(self.nstep):
             self.envs.render()
             # reshape observations to desired shape
-            self.step_obs = np.concatenate(self.step_obs)
+            self.step_obs = np.concatenate(self.step_obs, axis=0)
             self.step_obs = self.step_obs.reshape((-1,) + self.obs_space)
             # model forward (nprocess, *obs_shape)
             _step_obs = Variable(torch.from_numpy(self.step_obs).float(), volatile=True).cuda()
@@ -66,7 +65,6 @@ class A2C(object):
             episode_dones.append(step_done)
             episode_rws.append(step_reward)
             self.step_obs = step_obs
-
         # bootstrap
         last_step_obs = np.concatenate(self.step_obs)
         last_step_obs = last_step_obs.reshape((-1,) + self.obs_space)
@@ -74,7 +72,6 @@ class A2C(object):
         _step_obs = Variable(torch.from_numpy(last_step_obs).float(), volatile=True).cuda()
         _, last_step_value = self.model.act(_step_obs)
         episode_values.append(last_step_value.flatten())
-
         episode_obs = np.asarray(episode_obs).swapaxes(1, 0).reshape((-1, ) + self.obs_space)
         episode_rws = np.asarray(episode_rws).swapaxes(1, 0)
         episode_actions = np.asarray(episode_actions).swapaxes(1, 0)

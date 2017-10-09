@@ -22,14 +22,14 @@ class MinecraftWrapper(gym.Wrapper):
     def _reset(self):
         obs = self.env.reset()
         obs = self._to_gray(obs)
-        print(obs.shape)
         for _ in range(self.k): self.frames.append(obs)
         return self._observation()
 
     def _step(self, action):
         ob, reward, done, info = self.env.step(action)
-        self._to_gray(ob)
+        ob = self._to_gray(ob)
         self.frames.append(ob)
+        print(ob.shape, 'ob')
         return self._observation(), reward, done, info
 
     def _observation(self):
