@@ -1,28 +1,31 @@
-import gym
+from envs.minecraft_wrappers import make_minecraft
 from envs.subproc_vec_env import SubprocVecEnv
-from envs.env_wrappers import make_env, wrapper, make_minecraft
 
 if __name__ == '__main__':
-
-    # pg = ActorCritic(gym.make('LunarLander-v2'), 0.99, 4e-4)
-    # r = 0
-    # for i in range(0, 100000):
-    #     obs, rws, acts, values, total_reward = pg.run_episode(i)
-    #     returns = pg.calculate_returns(rws)
-    #     loss, pl, mse, adv, tv, entropy = pg.train(returns[:-1], obs=obs, actions=acts)
-    #     r += total_reward
-    #     if i % 100 == 0:
-    #         print('Update', i, r / 100, mse.data[0], entropy.data[0], pl.data[0])
-    #         r = 0
-    nprocess = 6
+    nprocess = 5
     gamma = 0.99
     nsteps = 30
+    lr = 1e-5
+    nstack = 4
+    e_coeff = 0.02
+    v_coeff = 0.5
+    task_id = 'MinecraftBasic-v0'
+    log_dir = 'mission_records/task_%s/nprocess_%s/gamma_%s/nsteps_%s/lr_%s/nstack_%s/e_coeff_%s/v_coeff%s' \
+              % (task_id, nprocess, gamma, nsteps, lr, nstack, e_coeff, v_coeff)
 
-    envs = SubprocVecEnv([make_minecraft('MinecraftBasic-v0', 0, i) for i in range(0, nprocess)], minecraft=True)
-    from agents.pytorch.policies import CNNPolicy, MLP
-    from agents.pytorch.models import A2C
+    thunk = []
+    for i in range(0, nprocess):
+        if i == 0:
+            _thunk = make_minecraft(task_id, rank=0, seed=i, log_dir=log_dir, record_fn=lambda x: x % 1000 == 0)
+        else:
+            _thunk = make_minecraft(task_id, rank=0, seed=i)
+        thunk.append(_thunk)
+    envs = SubprocVecEnv(thunk, minecraft=True)
 
-    a2c = A2C(envs, model=CNNPolicy, nstep=nsteps, nstack=4, lr=1e-5, e_coeff=0.02, v_coeff=0.5)
+    from agents.policies import CNNPolicy
+    from agents.models import A2C
+
+    a2c = A2C(envs, model=CNNPolicy, nstep=nsteps, nstack=nstack, lr=lr, e_coeff=e_coeff, v_coeff=v_coeff)
     total = 0
     for e in range(0, 50000):
         episode_obs, episode_rws, episode_values, episode_actions, episode_dones, returns, final_reward = a2c.run_episode(e)

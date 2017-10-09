@@ -16,14 +16,13 @@ Reward: reach goal: +1 else: 0.
 but more complex than the first one with two rooms and obstacles.
 
 # TODO
-1. Implement A2C.
-2. Train A2C on the first environment.
-3. Implement PPO.
-4. Train PPO on the first environment.
-5. Test trained A2C on the second environment.
-6. Test trained PPO on the second environment.
+1. Train A2C on the first environment.
+2. Implement PPO.
+3. Train PPO on the first environment.
+4. Test trained A2C on the second environment.
+5. Test trained PPO on the second environment.
 
-# Things learned:
+# Things learned and completed:
 1. 09/28/2017: Use multiprocess Process and Pipe to collect data from different processes.
 ```
     from multiprocess import Process, Pipe
@@ -44,6 +43,19 @@ but more complex than the first one with two rooms and obstacles.
     In OpenAI A2C baseline implementation, instead of using -log(pi(a)) as the loss function, 
     they use cross entropy: cross_entropy(action_logits, taken_actions) as the policy loss. This
     makes me wonder these two loss functions are equal. It turns out that these two are equal. 
+    
+3. 10/09/2017: Finished implementing A2C in pytorch and discarded tensorflow version.
+    
+    OpenAi Gym monitor to record the videos and check learning. 
+    
+    Some implementation details: 
+    
+    * when an episode finishes, multiply zeros to that state makes the gradient becomes 0, 
+    so this way that observation is not learned by the agent.
+    
+    * Need to call env.init() before wrapping the environments.
+    
+    
 
 # Issues
 1. Import pytorch and than calling agent.startMission() gives segmentation fault. 

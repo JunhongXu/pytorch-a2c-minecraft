@@ -1,8 +1,6 @@
 """This module is copied from openai baselines: https://github.com/openai/baselines"""
 import numpy as np
 from multiprocessing import Process, Pipe
-from gym import Env
-from envs.env_wrappers import MinecraftWrapper
 
 class VecEnv(object):
     """
@@ -29,8 +27,7 @@ class VecEnv(object):
 def worker(remote, env_fn_wrapper):
     if hasattr(env_fn_wrapper, 'x'):
         env = env_fn_wrapper.x()
-    else:
-        env = env_fn_wrapper()
+
     while True:
         cmd, data = remote.recv()
         if cmd == 'step':
@@ -49,10 +46,11 @@ def worker(remote, env_fn_wrapper):
         elif cmd == 'render':
             env.render()
         elif cmd == 'init':
-            env.init(start_minecraft=True, videoResolution=(84, 84),
-                                 recordDestination='logs/minecraft.tgz',
-                                 recordRewards=True, recordMP4=(20, 400000))
-            env = MinecraftWrapper(env)
+            env = env_fn_wrapper()
+            # env.unwrapped.init(start_minecraft=True, videoResolution=(84, 84))
+            # # _env.init(start_minecraft=True, videoResolution=(84, 84))
+            # # wrap after minecraft has initiated
+            # env = MinecraftWrapper(env)
             remote.send('finish_init')
         else:
             raise NotImplementedError
@@ -91,7 +89,7 @@ class SubprocVecEnv(VecEnv):
 
         for p in self.ps:
             p.start()
-
+        #
         if minecraft:
             self.init()
 

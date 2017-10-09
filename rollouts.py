@@ -1,6 +1,4 @@
 import numpy as np
-from envs.subproc_vec_env import SubprocVecEnv
-from envs.env_wrappers import make_env
 
 
 class Rollouts(object):
