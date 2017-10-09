@@ -1,66 +1,33 @@
-import os
-import gym_minecraft
 import gym
-import numpy as np
-
-from envs.bench import Monitor
-
-num_updates = 5000
-num_steps = 50
-render = True
-
-def make_env(env_id, seed, rank, log_dir):
-    def _thunk():
-        env = gym.make(env_id)
-        env.seed(seed + rank)
-        env = Monitor(env, os.path.join(log_dir, '{}.monitor.json'.format(rank)))
-        return env
-    return _thunk
-
-
-def calculate_returns(R, next_return, gamma=0.99):
-    """
-        R is a N*M matrix, where N is number of process, M is number of steps
-    """
-    returns = []
-    for s in reversed(range(R.shape[1])):
-        next_return = R[:, s] + gamma * next_return
-        print(next_return)
-        returns.append(next_return)
-    return returns
-
-
-def wrap_pytorch(x):
-    return Variable(torch.from_numpy(x).float().cuda())
-
+from envs.subproc_vec_env import SubprocVecEnv
+from envs.env_wrappers import make_env, wrapper, make_minecraft
 
 if __name__ == '__main__':
-    env = gym.make('MinecraftBasic-v0')
-    env.init(start_minecraft=True)
-    obs = env.reset()
 
-    # this import order is necessary to perform in Minecraft env
-    from torch.autograd import Variable
-    from agents.pytorch.models import CNNPolicy
-    import cv2
-    import torch
+    # pg = ActorCritic(gym.make('LunarLander-v2'), 0.99, 4e-4)
+    # r = 0
+    # for i in range(0, 100000):
+    #     obs, rws, acts, values, total_reward = pg.run_episode(i)
+    #     returns = pg.calculate_returns(rws)
+    #     loss, pl, mse, adv, tv, entropy = pg.train(returns[:-1], obs=obs, actions=acts)
+    #     r += total_reward
+    #     if i % 100 == 0:
+    #         print('Update', i, r / 100, mse.data[0], entropy.data[0], pl.data[0])
+    #         r = 0
+    nprocess = 4
+    gamma = 0.99
+    nsteps = 30
 
+    envs = SubprocVecEnv([make_minecraft('MinecraftBasic-v0', 0, i) for i in range(0, nprocess)], minecraft=True)
+    from agents.pytorch.policies import CNNPolicy, MLP
+    from agents.pytorch.models import A2C
 
-    policy = CNNPolicy(num_actions=4, obs_space=(84, 84))
-    policy.cuda()
-    done = False
-    for u in range(num_steps):
-        while not done:
-            obs = cv2.resize(obs, (84, 84))
-            obs = np.transpose(obs, (2, 0, 1))
-            tensor_obs = wrap_pytorch(obs)
-            tensor_obs = tensor_obs.unsqueeze(dim=0)
-            results = policy.forward(tensor_obs)
-            print(results)
-            env.render()
-            action = env.action_space.sample()
-            obs, r, done, _ = env.step(action)
-
-        if done:
-            env.reset()
-            done = False
+    a2c = A2C(envs, model=CNNPolicy, nstep=nsteps, nstack=4, lr=1e-5, e_coeff=0.05)
+    total = 0
+    for e in range(0, 10000):
+        episode_obs, episode_rws, episode_values, episode_actions, episode_dones, returns, final_reward = a2c.run_episode(e)
+        total += final_reward
+        loss, policy_loss, mse, advantage, train_values, entropy = a2c.train(returns, episode_obs, episode_actions)
+        print(policy_loss.data[0], mse.data[0], entropy.data[0])
+        print(total/1500)
+        total = 0

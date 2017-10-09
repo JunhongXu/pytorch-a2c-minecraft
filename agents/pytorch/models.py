@@ -1,32 +1,36 @@
-from policies import CNNPolicy, MLP
+import numpy as np
 from torch.optim import RMSprop, Adam
 from rollouts import Rollouts
 from torch.nn import functional as F
 import torch.nn as nn
 import torch
 from torch.autograd import Variable
-import numpy as np
+
 
 class A2C(object):
-    # TODO: implement the parllel version of A2C without using multi-processing
-    # TODO: with multi-processing method to speed up training
-    def __init__(self, envs, model, gamma, v_coeff, e_coeff, lr, nstep, nstack=None):
+    def __init__(self, envs, model, gamma=0.99, v_coeff=0.5, e_coeff=0.02, lr=1e-3, nstep=50, nstack=None):
         """A parallel version of actor-critic method"""
         self.envs = envs
         self.nactions = self.envs.action_space.n
         self.nstack = nstack
         self.nstep = nstep
         self.obs_space = self.create_obs_space()
-
+        if len(self.obs_space) > 1:
+            self.use_rgb = True
+        else:
+            self.use_rgb = False
         # loss parameters
         self.v_coeff, self.e_coeff, self.lr = v_coeff, e_coeff, lr
         self.gamma = gamma
-        self.nprocess = len(envs)
+        self.nprocess = len(envs.remotes)
 
         # initialize model
         self.model = model(self.obs_space, self.nactions)
+        self.model.cuda()
+        # start environment
+        self.step_obs = envs.reset()
 
-        # self.rollout = Rollouts()
+        self.optimizer = Adam(params=self.model.parameters(), lr=lr)
 
     def run_episode(self, episode):
         """
@@ -35,10 +39,76 @@ class A2C(object):
 
         Returns episode rewards , predicted values, observations, and actions
         """
-        episode_rws, episode_values, episode_actions, episode_obs = [self._2d_list() for _ in range(4)]
-        dones = np.array([False for _ in range(self.nprocess)])
+        episode_rws, episode_values, episode_actions, episode_obs, episode_dones = [[] for _ in range(5)]
+        final_reward = 0
+        for step in range(self.nstep):
+            self.envs.render()
+            # reshape observations to desired shape
+            self.step_obs = np.concatenate(self.step_obs)
+            self.step_obs = self.step_obs.reshape((-1,) + self.obs_space)
+            # model forward (nprocess, *obs_shape)
+            _step_obs = Variable(torch.from_numpy(self.step_obs).float(), volatile=True).cuda()
+            step_action, step_value = self.model.act(_step_obs)
+            step_action = step_action.flatten()
+            step_value = step_value.flatten()
+            # step
+            step_obs, step_reward, step_done, _ = self.envs.step(step_action)
+            final_reward += np.asarray(step_reward).mean()
+            step_reward = np.sign(step_reward)
+            for i, done in enumerate(step_done):
+                if done:
+                    step_obs[i] *= 0
 
+            # store to buffer
+            episode_obs.append(self.step_obs)
+            episode_actions.append(step_action)
+            episode_values.append(step_value)
+            episode_dones.append(step_done)
+            episode_rws.append(step_reward)
+            self.step_obs = step_obs
 
+        # bootstrap
+        last_step_obs = np.concatenate(self.step_obs)
+        last_step_obs = last_step_obs.reshape((-1,) + self.obs_space)
+        # model forward (nprocess, *obs_shape)
+        _step_obs = Variable(torch.from_numpy(last_step_obs).float(), volatile=True).cuda()
+        _, last_step_value = self.model.act(_step_obs)
+        episode_values.append(last_step_value.flatten())
+
+        episode_obs = np.asarray(episode_obs).swapaxes(1, 0).reshape((-1, ) + self.obs_space)
+        episode_rws = np.asarray(episode_rws).swapaxes(1, 0)
+        episode_actions = np.asarray(episode_actions).swapaxes(1, 0)
+        episode_dones = np.asarray(episode_dones).swapaxes(1, 0)
+        episode_values = np.asarray(episode_values).swapaxes(1, 0)
+        returns = self.calculate_returns(episode_values[:, -1], episode_rws, episode_dones)
+        return episode_obs, episode_rws.flatten(), episode_values.flatten(), episode_actions.flatten(), episode_dones.flatten(), returns.flatten(), final_reward
+
+    def train(self, returns, obs, actions):
+        returns = Variable(torch.from_numpy(returns).cuda()).float()
+        obs = Variable(torch.from_numpy(obs).cuda()).float()
+        actions = Variable(torch.LongTensor(actions)).cuda().view(-1, 1)
+        # get action logits and values from the model
+        logits, train_values = self.model.forward(obs)
+        advantage = returns - train_values.view(-1)
+        log_logits = F.log_softmax(logits)
+        selected_logtis = log_logits.gather(1, actions).view(-1)
+        policy_loss = -Variable(advantage.data) * selected_logtis
+        # calculate policy loss
+        policy_loss = torch.mean(policy_loss)
+
+        # calculate entropy
+        entropy = log_logits * F.softmax(logits)
+        entropy = - entropy.sum(-1).mean()
+
+        # value function
+        mse = torch.mean(torch.pow(advantage, 2))
+        loss = policy_loss + mse * self.v_coeff - entropy * self.e_coeff
+
+        self.optimizer.zero_grad()
+        loss.backward()
+        nn.utils.clip_grad_norm(self.model.parameters(), 0.5)
+        self.optimizer.step()
+        return loss, policy_loss, mse, advantage, train_values, entropy
 
     def create_obs_space(self):
         obs_shape = self.envs.observation_space.shape
@@ -46,14 +116,23 @@ class A2C(object):
             self.use_rgb = True
             h, w, c = self.envs.observation_space.shape
             c *= self.nstack
-            obs_shape = (h, w, c)
+            obs_shape = (c, h, w)
         else:
-            c = self.envs.observation_space.shape[0]
+            c = self.envs.observation_space.shape
             obs_shape = c
         return obs_shape
 
-    def _2d_list(self):
-        return [[] for _ in range(self.nprocess)]
+    def calculate_returns(self, last_value, episode_rws, episode_dones):
+        episode_dones = 1 - episode_dones
+        last_value = last_value * episode_dones[:, -1]
+        returns = []
+        for env_idx, (value, reward, done) in enumerate(zip(last_value, episode_rws, episode_dones)):
+            R = np.zeros(self.nstep+1)
+            R[-1] = value
+            for idx in reversed(range(self.nstep)):
+                R[idx] = self.gamma * R[idx+1] * done[idx] + reward[idx]
+            returns.append(R[:-1])
+        return np.asarray(returns)
 
 
 class ActorCritic(object):
@@ -74,8 +153,8 @@ class ActorCritic(object):
         # print(nstep)
         returns = np.zeros(nstep)
         returns[-1] = rewards[-1]
-        for i in reversed(range(0, nstep-1)):
-            returns[i] = self.gamma * returns[i+1] + rewards[i]
+        for i in reversed(range(0, nstep - 1)):
+            returns[i] = self.gamma * returns[i + 1] + rewards[i]
         return returns
 
     def run_episode(self, episode):
@@ -94,11 +173,12 @@ class ActorCritic(object):
         while not done:
             if episode % 500 == 0:
                 self.env.render()
+
             # add observation to buffer
             episode_obs.append(step_obs)  # act
             obs_tensor = Variable(torch.from_numpy(step_obs[np.newaxis, :]).float(), volatile=True).cuda()
             step_action, step_value = self.model.act(obs_tensor)
-            step_action, step_value = step_action.cpu().numpy()[0][0], step_value.cpu().numpy()[0][0]
+            step_action, step_value = step_action[0][0], step_value[0][0]
 
             # step
             step_obs, step_rewards, done, _ = self.env.step(step_action)
@@ -112,7 +192,8 @@ class ActorCritic(object):
         if done:
             episode_rewards.append(0)
 
-        return np.asarray(episode_obs), np.asarray(episode_rewards), np.asarray(episode_actions), np.asarray(episode_values), total_reward
+        return np.asarray(episode_obs), np.asarray(episode_rewards), np.asarray(episode_actions), np.asarray(
+            episode_values), total_reward
 
     def train(self, returns, obs, actions):
         returns = Variable(torch.from_numpy(returns).cuda()).float()
@@ -134,7 +215,7 @@ class ActorCritic(object):
 
         # value function
         mse = torch.mean(torch.pow(advantage, 2))
-        loss = policy_loss + mse/2 - entropy * 0.02
+        loss = policy_loss + mse / 2 - entropy * 0.02
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -142,17 +223,4 @@ class ActorCritic(object):
         self.optimizer.step()
         return loss, policy_loss, mse, advantage, train_values, entropy
 
-
-if __name__ == '__main__':
-    import gym
-    pg = ActorCritic(gym.make('LunarLander-v2'), 0.99, 4e-4)
-    r = 0
-    for i in range(0, 100000):
-        obs, rws, acts, values, total_reward = pg.run_episode(i)
-        returns = pg.calculate_returns(rws)
-        loss, pl, mse, adv, tv, entropy = pg.train(returns[:-1], obs=obs, actions=acts)
-        r += total_reward
-        if i % 100 == 0:
-            print('Update', i, r/100, mse.data[0], entropy.data[0], pl.data[0])
-            r = 0
 

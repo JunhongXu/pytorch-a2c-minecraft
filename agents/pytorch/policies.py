@@ -7,7 +7,7 @@ class CNNPolicy(nn.Module):
     def __init__(self, obs_space, num_actions):
         """64*3*3 -> 128*3*3 -> 256*3*3 -> 512"""
         super(CNNPolicy, self).__init__()
-        h, w, c = obs_space
+        c, h, w = obs_space
         self.obs_space = obs_space
         self.num_actions = num_actions
 
@@ -42,8 +42,13 @@ class CNNPolicy(nn.Module):
         return act_logits, value
 
     def act(self, x):
-        action, _ = self.forward(x)
-        return action.multinomial().data
+        action, values = self(x)
+        action = F.softmax(action)
+        action = action.multinomial().data
+        values = values.data
+        action = action.cpu().numpy()
+        values = values.cpu().numpy()
+        return action, values
 
     @staticmethod
     def __make_conv_elu(input_feats, output_feats, size, stride, padding=0):
@@ -55,7 +60,7 @@ class MLP(nn.Module):
         """obs->256->256->(num_actions, value)"""
         super(MLP, self).__init__()
         self.fc1 = nn.Sequential(
-            nn.Linear(num_obs, 256),
+            nn.Linear(num_obs[0], 256),
             nn.ELU()
         )
 
@@ -84,12 +89,13 @@ class MLP(nn.Module):
 
     def act(self, x):
         """returns predicted action and value for a given state"""
-        logits, values = self.forward(x)
-        # N*NUM_ACT
-        probs = F.softmax(logits)
-        # N*1
-        actions = probs.multinomial().data
-        return actions, values.data
+        actions, values = self.forward(x)
+        actions = F.softmax(actions)
+        actions = actions.multinomial().data
+        values = values.data
+        actions = actions.cpu().numpy()
+        values = values.cpu().numpy()
+        return actions, values
 
 
 if __name__ == '__main__':

@@ -8,6 +8,35 @@ from bench import Monitor
 import gym_minecraft
 
 
+class MinecraftWrapper(gym.Wrapper):
+    def __init__(self, env, k=4):
+        gym.Wrapper.__init__(self, env)
+        h, w, c = self.observation_space.shape
+        self.k = k
+        self.frames = deque(maxlen=k)
+        self.observation_space = spaces.Box(0, 255, shape=(h, w, 1))
+
+    def _to_gray(self, obs):
+        return np.expand_dims(cv2.cvtColor(obs, cv2.COLOR_RGB2GRAY), -1)
+
+    def _reset(self):
+        obs = self.env.reset()
+        obs = self._to_gray(obs)
+        print(obs.shape)
+        for _ in range(self.k): self.frames.append(obs)
+        return self._observation()
+
+    def _step(self, action):
+        ob, reward, done, info = self.env.step(action)
+        self._to_gray(ob)
+        self.frames.append(ob)
+        return self._observation(), reward, done, info
+
+    def _observation(self):
+        assert len(self.frames) == self.k
+        return np.concatenate(self.frames, axis=2)
+
+
 class WarpFrame(gym.ObservationWrapper):
     def __init__(self, env, h, w, c):
         super(WarpFrame, self).__init__(env)
@@ -53,6 +82,11 @@ class ClipRewardEnv(gym.RewardWrapper):
         return np.sign(reward)
 
 
+class DoNothingWrapper(gym.RewardWrapper):
+    def _reward(self, reward):
+        return reward
+
+
 class FireResetEnv(gym.Wrapper):
     def __init__(self, env):
         """Take action on reset for environments that are fixed until firing."""
@@ -71,10 +105,18 @@ class FireResetEnv(gym.Wrapper):
         return obs
 
 
+def make_minecraft(game_id, seed, rank):
+    def _thunk():
+        env = gym.make(game_id)
+        env.seed(seed+rank)
+        return env
+    return _thunk
+
+
 def wrapper(env):
-    env = ClipRewardEnv(env)
-    env = WarpFrame(env, 84, 84, 1)
-    env = FrameStack(env, 4)
+    env = DoNothingWrapper(env)
+    # env = WarpFrame(env, 84, 84, 1)
+    # env = FrameStack(env, 4)
     return env
 
 

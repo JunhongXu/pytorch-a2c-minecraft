@@ -21,7 +21,7 @@ class Rollouts(object):
             h, w, c = obs_shape
             self.observations = np.zeros((nsteps, nprocess, h, w, c))
         else:
-            self.observations = np.zeros((nsteps, nprocess, obs_shape))
+            self.observations = np.zeros((nsteps, nprocess, obs_shape[0]))
         self.log_actions = np.zeros((nsteps, nprocess, nactions))
         self.actions = np.zeros((nsteps, nprocess))
         self.values = np.zeros((nsteps, nprocess))
@@ -59,20 +59,3 @@ class Rollouts(object):
         for step in reversed(range(self.nsteps)):
             self.returns[step] = self.gamma * self.returns[step+1] * self.dones[step] + self.rewards[step]
 
-
-if __name__ == '__main__':
-    subproc = SubprocVecEnv([make_env('Breakout-v0', 0, i, 'logs') for i in range(0, 4)])
-    obs = subproc.reset()
-
-    rollout = Rollouts(0.99, 4, 15, 4, subproc.observation_space.shape)
-    for i in range(15):
-        subproc.render()
-        action = np.repeat(subproc.action_space.sample(), 4)
-        log_action = np.random.randn(4, subproc.action_space.n)
-        obs, reward, done, _ = subproc.step(action)
-        rollout.update(i, done, reward, log_action, action, reward, obs)
-    rollout.values[-1] = reward
-    rollout.calc_returns(reward)
-    print(rollout.returns)
-    print(rollout.dones)
-    print(rollout.rewards)

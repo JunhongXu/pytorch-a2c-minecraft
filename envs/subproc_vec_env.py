@@ -2,6 +2,7 @@
 import numpy as np
 from multiprocessing import Process, Pipe
 from gym import Env
+from envs.env_wrappers import MinecraftWrapper
 
 class VecEnv(object):
     """
@@ -26,7 +27,10 @@ class VecEnv(object):
 
 
 def worker(remote, env_fn_wrapper):
-    env = env_fn_wrapper.x()
+    if hasattr(env_fn_wrapper, 'x'):
+        env = env_fn_wrapper.x()
+    else:
+        env = env_fn_wrapper()
     while True:
         cmd, data = remote.recv()
         if cmd == 'step':
@@ -45,16 +49,11 @@ def worker(remote, env_fn_wrapper):
         elif cmd == 'render':
             env.render()
         elif cmd == 'init':
-            env = env.env
-            while True:
-                if isinstance(env, Env):
-                    if hasattr(env, 'env'):
-                        env = env.env
-                    else:
-                        env.init(start_minecraft=True, videoResolution=(128, 128), allowDiscreteMovement=["move", "turn"])
-                        break
+            env.init(start_minecraft=True, videoResolution=(84, 84),
+                                 recordDestination='logs/minecraft.tgz',
+                                 recordRewards=True, recordMP4=(20, 400000))
+            env = MinecraftWrapper(env)
             remote.send('finish_init')
-
         else:
             raise NotImplementedError
 
@@ -82,8 +81,14 @@ class SubprocVecEnv(VecEnv):
         """
         nenvs = len(env_fns)
         self.remotes, self.work_remotes = zip(*[Pipe() for _ in range(nenvs)])
-        self.ps = [Process(target=worker, args=(work_remote, CloudpickleWrapper(env_fn)))
-            for (work_remote, env_fn) in zip(self.work_remotes, env_fns)]
+        if minecraft:
+            envs = env_fns
+            self.ps = [Process(target=worker, args=(work_remote, env))
+                       for (work_remote, env) in zip(self.work_remotes, envs)]
+        else:
+            self.ps = [Process(target=worker, args=(work_remote, CloudpickleWrapper(env_fn)))
+                for (work_remote, env_fn) in zip(self.work_remotes, env_fns)]
+
         for p in self.ps:
             p.start()
 
