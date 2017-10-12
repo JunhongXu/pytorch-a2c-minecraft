@@ -38,7 +38,7 @@ The parameters can be adjusted like number of processes, gamma value, learning r
 ![alt-text-2](videos/3200.gif "Episode-3200")
 ![alt-text-2](videos/3600.gif "Episode-3600")
 
-The recorded results from episode 0, 400(failed), 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600.
+The recorded results from episode 0(failed), 400, 800, 1200, 1600, 2000, 2400, 2800, 3200, 3600.
 As we can see, the last episode can quickly navigate to the goal. However, the result is not so
 promising, the agent still needs more than 20 steps to reach the goal. After the second iteration, the agent soon found a sub-optimal policy.
 
