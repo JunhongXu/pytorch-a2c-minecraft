@@ -5,7 +5,6 @@ from torch.nn import functional as F
 
 class CNNPolicy(nn.Module):
     def __init__(self, obs_space, num_actions):
-        """64*3*3 -> 128*3*3 -> 256*3*3 -> 512"""
         super(CNNPolicy, self).__init__()
         c, h, w = obs_space
         self.obs_space = obs_space
