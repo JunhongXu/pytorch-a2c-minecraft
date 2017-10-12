@@ -40,7 +40,7 @@ def make_minecraft(task_id, seed, rank, resolution=(84, 84), log_dir=None, recor
     def _thunk():
         env = gym.make(task_id)
         env.seed(seed+rank)
-        env.init(start_minecraft=True, videoResolution=resolution, allowDiscreteMovement=('turn', 'move'))
+        env.init(start_minecraft=True, videoResolution=resolution, allowDiscreteMovement=['turn', 'move'])
         if log_dir is not None:
             env = Monitor(env, log_dir, video_callable=record_fn)
         env = MinecraftWrapper(env)

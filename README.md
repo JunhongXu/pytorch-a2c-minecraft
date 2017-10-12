@@ -1,64 +1,58 @@
-# Research project on Minecraft tasks.
+##Pytorch version of Parallel Actor Critic
 
-By using Minecraft game as a testbed, we can test out and compare 
-the performance of different existing deep reinforcement learning 
-methods in many tasks.
+Tried to solve the MinecraftBasic-v0 task using A2C.
+Gym environment code are copied and modified from https://github.com/openai/baselines.
 
-In addition, this project is also going to develop a new deep 
-reinforcement learning system that is able to solve a series of tasks
-by interacting with human in a sparse rewarded environment.
+## Requirements
+1. gym: https://github.com/openai/gym
+2. minecraft-py: https://github.com/tambetm/minecraft-py
+3. gym_minecraft: https://github.com/tambetm/gym-minecraft
+4. pytorch: https://github.com/pytorch/pytorch
 
-# Tasks
+python 2.7 is preferred if we want to use minecraft-py.
 
-1. Basic Navigation: really simple environment with only one room. 
-Reward: reach goal: +1 else: 0.
-2. Normal Navigation: another simple environment, 
-but more complex than the first one with two rooms and obstacles.
 
-# TODO
-1. Train A2C on the first environment.
-2. Implement PPO.
-3. Train PPO on the first environment.
-4. Test trained A2C on the second environment.
-5. Test trained PPO on the second environment.
+## Run
 
-# Things learned and completed:
-1. 09/28/2017: Use multiprocess Process and Pipe to collect data from different processes.
-```
-    from multiprocess import Process, Pipe
-    def collector(worker):
-        cmd, data = worker.recv()
-        ...
-        
-    remotes, workers = Pipe()
-    p = Process(target=collector, args=(workers, ))
-    p.start()
-    
-    remotes.send(...)
-    obs = remotes.recv()
-```
+1. Minecraft environment:
+python run_minecraft.py
 
-2. 10/02/2017: Minimizing cross entropy loss == maximizing log likelihood
-    
-    In OpenAI A2C baseline implementation, instead of using -log(pi(a)) as the loss function, 
-    they use cross entropy: cross_entropy(action_logits, taken_actions) as the policy loss. This
-    makes me wonder these two loss functions are equal. It turns out that these two are equal. 
-    
-3. 10/09/2017: Finished implementing A2C in pytorch and discarded tensorflow version.
-    
-    OpenAi Gym monitor to record the videos and check learning. 
-    
-    Some implementation details: 
-    
-    * when an episode finishes, multiply zeros to that state makes the gradient becomes 0, 
-    so this way that observation is not learned by the agent.
-    
-    * Need to call env.init() before wrapping the environments.
-    
-    
+2. LunarLander environment:
+python run_lunarlander.py
 
-# Issues
-1. Import pytorch and than calling agent.startMission() gives segmentation fault. 
-A workaround is using tensorflow for now.
+The parameters can be adjusted like number of processes, gamma value, learning rate, etc.
 
-Solved, import pytorch after the first env.reset()
+## Results
+
+1. Minecraft:
+
+
+![alt-text-1](videos/0.gif "Episode-0")
+![alt-text-2](videos/400.gif "Episode-400")
+![alt-text-3](videos/800.gif "Episode-800")
+![alt-text-4](videos/1200.gif "Episode-1200")
+![alt-text-5](videos/1600.gif "Episode-1600")
+![alt-text-2](videos/2000.gif "Episode-2000")
+![alt-text-2](videos/2400.gif "Episode-2400")
+![alt-text-2](videos/2800.gif "Episode-2800")
+![alt-text-2](videos/3200.gif "Episode-3200")
+![alt-text-2](videos/3600.gif "Episode-3600")
+
+The recorded results from episode 0, 400, 800. 1200. 1600. 2000. 2400, 2800, 3200, 3600.
+As we can see, the last episode can quickly navigate to the goal. However, the result is not so
+promising, the agent still needs more than 20 steps to reach the goal. After the second iteration, the agent soon found a sub-optimal policy.
+
+Averaged rewards:
+![alt-text-1](videos/rewards.png "Episode-0")
+
+
+2. LunarLander:
+In progress....
+
+## Issues:
+
+Unlike Atari or other openai environments, Minecraft will not stop and wait for the agent to execute an action. Therefore, 
+agents are missing lots of observations if opening too many processes. This will degrade the performance as discussed in 
+https://github.com/tambetm/gym-minecraft/issues/3
+
+We can set the tick to a higher value in task markdown.

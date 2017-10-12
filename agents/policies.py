@@ -16,7 +16,7 @@ class CNNPolicy(nn.Module):
         self.conv3 = self.__make_conv_elu(64, 64, 3, 1)
 
         self.fc1 = nn.Sequential(
-            nn.Linear(64*49, 512),
+            nn.Linear(64, 512),
             nn.ELU()
         )
 
@@ -101,9 +101,9 @@ class MLP(nn.Module):
 if __name__ == '__main__':
     import numpy as np
     from torch.autograd import Variable
-    cnn = CNNPolicy((84, 84), 4)
+    cnn = CNNPolicy((4, 40, 40), 4)
     cnn.cuda()
-    obs = np.random.randn(1, 3, 84, 84)
+    obs = np.random.randn(1, 4, 40, 40)
     obs = torch.from_numpy(obs).float()
     obs = Variable(obs).cuda()
 

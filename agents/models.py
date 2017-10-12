@@ -5,16 +5,19 @@ from torch.nn import functional as F
 import torch.nn as nn
 import torch
 from torch.autograd import Variable
-
+from policies import MLP
 
 class A2C(object):
-    def __init__(self, envs, model, gamma=0.99, v_coeff=0.5, e_coeff=0.02, lr=1e-3, nstep=50, nstack=None):
+    def __init__(self, envs, model, gamma=0.99, v_coeff=0.5, e_coeff=0.02, lr=1e-3, nstep=50, render=True, nstack=None):
         """A parallel version of actor-critic method"""
         self.envs = envs
         self.nactions = self.envs.action_space.n
         self.nstack = nstack
         self.nstep = nstep
         self.obs_space = self.create_obs_space()
+        self.render = render
+        self.final_reward = 0
+        self.first_env_done = False
         if len(self.obs_space) > 1:
             self.use_rgb = True
         else:
@@ -39,9 +42,10 @@ class A2C(object):
         Returns episode rewards , predicted values, observations, and actions
         """
         episode_rws, episode_values, episode_actions, episode_obs, episode_dones = [[] for _ in range(5)]
-        final_reward = 0
+
         for step in range(self.nstep):
-            self.envs.render()
+            if self.render:
+                self.envs.render()
             # reshape observations to desired shape
             self.step_obs = np.concatenate(self.step_obs, axis=0)
             self.step_obs = self.step_obs.reshape((-1,) + self.obs_space)
@@ -52,13 +56,21 @@ class A2C(object):
             step_value = step_value.flatten()
             # step
             step_obs, step_reward, step_done, _ = self.envs.step(step_action)
-            final_reward += np.asarray(step_reward).mean()
-            step_reward = np.sign(step_reward)
+
             for i, done in enumerate(step_done):
                 if done:
                     step_obs[i] *= 0
 
+            if step_done[0]:
+                self.first_env_done = True
+                self.final_reward = 0
+            else:
+                self.first_env_done = False
+                # only record the first env
+                self.final_reward += step_reward[0]
+
             # store to buffer
+            step_reward = np.sign(step_reward)
             episode_obs.append(self.step_obs)
             episode_actions.append(step_action)
             episode_values.append(step_value)
@@ -78,7 +90,7 @@ class A2C(object):
         episode_dones = np.asarray(episode_dones).swapaxes(1, 0)
         episode_values = np.asarray(episode_values).swapaxes(1, 0)
         returns = self.calculate_returns(episode_values[:, -1], episode_rws, episode_dones)
-        return episode_obs, episode_rws.flatten(), episode_values.flatten(), episode_actions.flatten(), episode_dones.flatten(), returns.flatten(), final_reward
+        return episode_obs, episode_rws.flatten(), episode_values.flatten(), episode_actions.flatten(), episode_dones.flatten(), returns.flatten()
 
     def train(self, returns, obs, actions):
         returns = Variable(torch.from_numpy(returns).cuda()).float()
