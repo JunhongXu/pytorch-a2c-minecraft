@@ -1,4 +1,4 @@
-##Pytorch version of Parallel Actor Critic
+## Pytorch version of Parallel Actor Critic
 
 Tried to solve the MinecraftBasic-v0 task using A2C.
 Gym environment code are copied and modified from https://github.com/openai/baselines.
