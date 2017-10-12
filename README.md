@@ -43,7 +43,7 @@ As we can see, the last episode can quickly navigate to the goal. However, the r
 promising, the agent still needs more than 20 steps to reach the goal. After the second iteration, the agent soon found a sub-optimal policy.
 
 Averaged rewards:
-![alt-text-1](videos/rewards.png "Episode-0")
+![alt-text-1](videos/rewards.png "Averaged rewards")
 
 
 2. LunarLander:
