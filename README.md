@@ -27,8 +27,8 @@ The parameters can be adjusted like number of processes, gamma value, learning r
 1. Minecraft:
 
 
-![alt-text-1](videos/400.gif "Episode-0")
-![alt-text-2](videos/0.gif "Episode-400")
+![alt-text-1](videos/0.gif "Episode-0")
+![alt-text-2](videos/400.gif "Episode-400")
 ![alt-text-3](videos/800.gif "Episode-800")
 ![alt-text-4](videos/1200.gif "Episode-1200")
 ![alt-text-5](videos/1600.gif "Episode-1600")
