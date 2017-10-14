@@ -15,10 +15,10 @@ python 2.7 is preferred if we want to use minecraft-py.
 ## Run
 
 1. Minecraft environment:
-python run_minecraft.py
+<code>python run_minecraft.py</code>
 
 2. LunarLander environment:
-python run_lunarlander.py
+<code>python run_lunarlander.py</code>
 
 The parameters can be adjusted like number of processes, gamma value, learning rate, etc.
 
